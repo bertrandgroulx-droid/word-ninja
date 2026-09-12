@@ -64,6 +64,13 @@ async function run() {
       sorted: words.every((w, i) => i === 0 || words[i - 1] <= w),
       unique: set.size === words.length,
       hasCommon: ["cat", "stone", "ninja", "letter"].filter((w) => set.has(w)),
+      // Ordinary words that happen to be somebody's name. A first-names filter
+      // once threw away 813 of these, WILL among them, and a player reported it.
+      alsoNames: ["will", "bill", "mark", "rose", "grace", "hope", "art", "dawn",
+        "faith", "may", "jack", "chase", "joy", "rich", "summer", "brook", "ivy",
+        "olive", "pearl", "robin"].filter((w) => !set.has(w)),
+      // Actual proper nouns. The Scrabble dictionary keeps these out by itself.
+      properNouns: ["helen", "santa", "moore", "jessica", "michael"].filter((w) => set.has(w)),
       singles: words.filter((w) => w.length === 1),
       twoLetter: words.filter((w) => w.length === 2).length,
       vowelShare: vowelWeight / total,
@@ -78,6 +85,10 @@ async function run() {
   assert(data.twoLetter > 40, `the two-letter words are there, got ${data.twoLetter}`);
   assert(data.hasCommon.includes("cat") && data.hasCommon.includes("stone"),
     `everyday words are present, found ${data.hasCommon.join(",")}`);
+  assert(data.alsoNames.length === 0,
+    `words that are also names must count: missing ${data.alsoNames.join(" ")}`);
+  assert(data.properNouns.length === 0,
+    `proper nouns must not: found ${data.properNouns.join(" ")}`);
   assert(data.letters === 26, "every letter is in the bag");
   assert(data.vowelShare > 0.25 && data.vowelShare < 0.5,
     `vowels are a workable share of the bag, got ${data.vowelShare.toFixed(2)}`);
