@@ -111,10 +111,23 @@ list is real Scrabble skill and the game pays for it, which is the same bargain
 
 The whole list would be 649 KB of text, so it ships **front-coded** — each word
 stored as a digit for how many leading letters it shares with the word before,
-then the rest of it. That is 243 KB, about 103 KB gzipped, and it unpacks into a
-`Set` in roughly a tenth of a second on a throttled phone, once, before the first
-round. The digit sorts below `a` and every letter above it, which is all the
-decoder needs to find a boundary.
+then the rest of it. That is 243 KB, about 103 KB gzipped. The digit sorts below
+`a` and every letter above it, which is all the decoder needs to find a
+boundary.
+
+Unpacking it into a `Set` costs about a tenth of a second on a throttled phone.
+That used to land *inside the first paint*, because the init script runs before
+the browser draws anything, and it showed:
+
+| | Median first contentful paint, 4× CPU throttle |
+|---|---|
+| Unpacked during init | 372 ms |
+| Warmed after the first frame | **164 ms** |
+
+Nothing needs the dictionary until a word is submitted, and the start card
+stands between loading and the first cut, so the warm-up is scheduled just after
+the first frame. The lookup still builds on demand, so a submit that somehow
+beats the warm-up is correct rather than fast.
 
 There is deliberately **no first-names filter**. An early version had one and it
 threw away 813 ordinary words, `WILL` `BILL` `ROSE` `GRACE` `HOPE` `ART` `DAWN`
