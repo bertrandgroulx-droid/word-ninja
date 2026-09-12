@@ -25,14 +25,16 @@ window.createWordNinja = function (ctx) {
     // This is a WORD game: you have to read a dozen letters, find a word in
     // them, and plan a path through it in the right order. The first build ran
     // at 1.15, about two seconds airborne, which is fine for cutting fruit on
-    // reflex and hopeless for thinking.
+    // reflex and hopeless for thinking. Both speeds have since come down twice
+    // on play-test feedback; what reads as "fast" here is still very floaty by
+    // arcade standards, and deliberately so.
     //
     // Each speed pairs a gravity with a wave gap, because slower tiles linger:
     // hold the gap steady and the screen floods. These pairings both leave
     // about a dozen tiles up at once, so only the pace changes.
     speeds: {
-      slow: { gravity: 0.12, waveGap: [3.4, 2.4] },   // ~6.8s airborne
-      fast: { gravity: 0.26, waveGap: [2.4, 1.6] }    // ~4.6s airborne
+      slow: { gravity: 0.06, waveGap: [4.6, 3.4] },   // ~9.7s airborne
+      fast: { gravity: 0.12, waveGap: [3.4, 2.4] }    // ~6.8s airborne
     },
     // Tuned against a simulation of how many words are formable from the tiles
     // on screen: sparser or shorter-lived waves left nothing to cut about a

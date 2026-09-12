@@ -107,6 +107,7 @@ async function run() {
       differs: flat(a) !== flat(c),
       waves: a.length,
       tiles: tiles.length,
+      lastWave: a[a.length - 1].t,
       bombs: bombs.length,
       earliestBomb: Math.min(...a.filter((w) => w.tiles.some((t) => t.bomb)).map((w) => w.t)),
       // Launch across the width, and high enough to be reachable without
@@ -122,8 +123,9 @@ async function run() {
   });
   assert(sched.stable, "the same seed deals the same run");
   assert(sched.differs, "a different seed deals a different run");
-  assert(sched.waves >= 20 && sched.tiles > 90,
+  assert(sched.waves >= 12 && sched.tiles > 55,
     `a round's worth of play, got ${sched.waves} waves and ${sched.tiles} tiles`);
+  assert(sched.lastWave > 50, `waves keep coming to the end, last at ${sched.lastWave.toFixed(0)}s`);
   assert(sched.inBounds, "tiles launch on screen");
   assert(sched.lettersOnly, "every non-bomb tile carries a letter");
   assert(sched.vowelWaves === 0, `every wave of 2+ has a vowel, ${sched.vowelWaves} without`);
@@ -151,7 +153,7 @@ async function run() {
   const fast = await hang();
   assert(fast.speed === "fast", "opens on the fast speed");
   assert(fast.min > 3.5, `tiles hang long enough to read, min ${fast.min.toFixed(1)}s`);
-  assert(fast.avg > 4 && fast.avg < 6, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
+  assert(fast.avg > 6 && fast.avg < 8, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
 
   // Slow is a real difference, and thins its waves so the screen doesn't flood.
   await page.evaluate(() => window.game._debug.setSpeed("slow"));

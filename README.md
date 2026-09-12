@@ -31,10 +31,12 @@ Sixty seconds. Everything else follows from that.
 - **Missing a letter costs nothing.** Tiles you ignore fall away. Hesitation
   costs opportunity, not points.
 
-**Slow or Fast** sets how long a tile hangs in the air, about seven seconds
-against four and a half. Same letters, same scoring, more or less time to think.
-The first build ran at two seconds and the first person to play it called it
-unplayable, which is the honest origin of this setting.
+**Slow or Fast** sets how long a tile hangs in the air, about ten seconds against
+seven. Same letters, same scoring, more or less time to think. The first build
+ran at two seconds and the first person to play it called it unplayable; both
+settings have come down twice since on play-test feedback, and what is called
+Fast here is still very floaty by arcade standards. Deliberately so: reading a
+dozen letters and planning a path through them is not a reflex.
 
 Two modes. **Daily** deals the same letters to everyone on the same speed, keyed
 to your local date, one attempt. **Practice** deals fresh letters as often as you
@@ -107,8 +109,8 @@ linger and a fixed gap would flood the screen:
 
 | Speed | Gravity | Airborne | Wave gap | Tiles on screen |
 |---|---|---|---|---|
-| Slow | 0.12 | ~6.8s | 3.4s → 2.4s | ~12 |
-| Fast | 0.26 | ~4.6s | 2.4s → 1.6s | ~12 |
+| Slow | 0.06 | ~9.7s | 4.6s → 3.4s | ~12 |
+| Fast | 0.12 | ~6.8s | 3.4s → 2.4s | ~12 |
 
 Only the pace changes; the crowd stays the same size.
 
