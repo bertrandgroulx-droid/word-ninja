@@ -104,6 +104,12 @@ async function run() {
   assert(demo.tiles === 3, `three tiles are cut in the example, got ${demo.tiles}`);
   assert(/CAT/.test(await page.$eval("#helpBack .demo figcaption", (e) => e.textContent)),
     "and the caption does the arithmetic");
+  // The rules quote specific numbers. Those are easy to leave behind when the
+  // tuning moves, so check the ones this suite also verifies behaviourally.
+  const rules = await page.$eval("#helpBack .card", (e) => e.textContent.replace(/\s+/g, " "));
+  for (const claim of ["60 seconds", "1:30", "×5", "3 seconds", "10 seconds", "Two letters or more"]) {
+    assert(rules.includes(claim), `the rules still state "${claim}"`);
+  }
   await page.click("#helpClose");
   assert(await page.$eval("#startBack", (e) => !e.classList.contains("hidden")), "start card is showing");
   assert((await state(page)).phase === "ready", "waiting to start");
