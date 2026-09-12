@@ -212,6 +212,18 @@ and the game is served at `https://<your-username>.github.io/word-ninja/`.
 
 ## Add to Home Screen
 
+The mark is a hooded ninja on the game's accent red, with the blade's cyan trail
+cutting corner to corner behind the head. Four shapes and no detail on purpose:
+at 60px on a home screen only the band and the two eyes actually read, so
+nothing else competes with them. `tools/make-icons.mjs` draws it, writing the
+PNGs and the `.ico` byte by byte rather than pulling in an image library, and
+takes `ICON_SIZES` and `ICON_OUT` from the environment so a proof at any size
+costs one command:
+
+```sh
+ICON_SIZES=60 ICON_OUT=/tmp/ node tools/make-icons.mjs
+```
+
 The app ships `apple-touch-icon` images at every iPhone and iPad size, a
 `favicon.ico`, and a web manifest, so on iOS (Share → *Add to Home Screen*) it
 gets a crisp icon and launches full-screen. The broad icon set is deliberate:
