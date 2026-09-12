@@ -122,13 +122,27 @@ async function run() {
   });
   assert(sched.stable, "the same seed deals the same run");
   assert(sched.differs, "a different seed deals a different run");
-  assert(sched.waves > 30 && sched.tiles > 90, `a round's worth of tiles, got ${sched.tiles}`);
+  assert(sched.waves >= 20 && sched.tiles > 90,
+    `a round's worth of play, got ${sched.waves} waves and ${sched.tiles} tiles`);
   assert(sched.inBounds, "tiles launch on screen");
   assert(sched.lettersOnly, "every non-bomb tile carries a letter");
   assert(sched.vowelWaves === 0, `every wave of 2+ has a vowel, ${sched.vowelWaves} without`);
   assert(sched.bombs > 0 && sched.earliestBomb >= 8, `bombs arrive, but not early: ${sched.earliestBomb}`);
 
-  // 5) Scoring: a valid word pays, longer words pay much more.
+  // 5) Tiles hang long enough to read and plan around. This is a word game:
+  //    at two seconds it was unplayable, whatever the other numbers said.
+  const airtime = await page.evaluate(() => {
+    const s = window.game._debug.schedule("airtime");
+    const rises = s.flatMap((w) => w.tiles.map((t) => t.rise));
+    // Matches the launch maths in release(): a tile is airborne
+    // 2 * sqrt(2 * rise / gravity) seconds, both in arena-height units.
+    const secs = rises.map((r) => 2 * Math.sqrt(2 * r / 0.26));
+    return { min: Math.min(...secs), avg: secs.reduce((a, b) => a + b, 0) / secs.length };
+  });
+  assert(airtime.min > 3.5, `tiles hang long enough to read, min ${airtime.min.toFixed(1)}s`);
+  assert(airtime.avg > 4 && airtime.avg < 7, `hang time is sane, avg ${airtime.avg.toFixed(1)}s`);
+
+  // 6) Scoring: a valid word pays, longer words pay much more.
   await page.click("#startBtn");
   assert((await state(page)).phase === "playing", "round started");
   const cat = await play(page, "cat");
@@ -137,14 +151,14 @@ async function run() {
   assert(longer.ok && longer.scored > cat.scored, "a longer word pays more");
   assert(longer.bonus > 0, "five letters buys time back");
 
-  // 6) Three in a row lifts the multiplier.
+  // 7) Three in a row lifts the multiplier.
   let s = await state(page);
   assert(s.streak === 2 && s.mult === 1, `streak building, got ${JSON.stringify(s)}`);
   await play(page, "table");
   s = await state(page);
   assert(s.mult === 2, `three in a row gives x2, got ${s.mult}`);
 
-  // 7) A word that isn't a word costs time and the multiplier.
+  // 8) A word that isn't a word costs time and the multiplier.
   const before = (await state(page)).remaining;
   const dud = await play(page, "zzzzq");
   assert(!dud.ok && dud.reason === "unknown", "gibberish is rejected");
@@ -152,14 +166,14 @@ async function run() {
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
 
-  // 8) Too short costs nothing; a repeat scores nothing.
+  // 9) Too short costs nothing; a repeat scores nothing.
   const shortWord = await play(page, "an");
   assert(!shortWord.ok && shortWord.reason === "short", "two letters is not a submission");
   const repeat = await play(page, "cat");
   assert(!repeat.ok && repeat.reason === "repeat", "the same word twice pays once");
   assert((await state(page)).score === after.score, "no score from short or repeated words");
 
-  // 9) A real drag across a real tile actually cuts it.
+  // 10) A real drag across a real tile actually cuts it.
   const box = await page.$eval("#cv", (e) => {
     const r = e.getBoundingClientRect();
     return { x: r.x, y: r.y, w: r.width, h: r.height };
@@ -176,7 +190,7 @@ async function run() {
   await page.mouse.up();
   assert((await state(page)).buffer === "", "lifting submits and clears");
 
-  // 10) A bomb costs ten seconds and the word in hand, but the run goes on.
+  // 11) A bomb costs ten seconds and the word in hand, but the run goes on.
   const cutBomb = async () => {
     const spot = await page.evaluate(() => {
       const arena = document.getElementById("arena").getBoundingClientRect();
@@ -203,7 +217,7 @@ async function run() {
   assert((await page.$eval("#stWords", (e) => e.textContent)) === "3", "three words survived the run");
   assert((await page.$$eval("#cutList span", (e) => e.length)) === 3, "the words are listed");
 
-  // 11) Time bonuses can't stretch the clock past the cap.
+  // 12) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {
     const d = window.game._debug;
     d.begin();
@@ -214,13 +228,13 @@ async function run() {
   assert(capped.remaining <= 90.01, `clock capped at 90s, got ${capped.remaining.toFixed(1)}`);
   await page.evaluate(() => window.game._debug.end("time"));
 
-  // 12) The daily run is one attempt, and the result is remembered.
+  // 13) The daily run is one attempt, and the result is remembered.
   await page.reload();
   await page.waitForFunction(() => window.game && document.getElementById("startSub"));
   const sub = await page.$eval("#startSub", (e) => e.textContent);
   assert(/already played/i.test(sub), `daily is spent after a run, got "${sub}"`);
 
-  // 13) Practice is always available, and running the clock out ends the round.
+  // 14) Practice is always available, and running the clock out ends the round.
   await page.click("#modePractice");
   assert((await state(page)).mode === "practice", "switched to practice");
   await page.click("#startBtn");
@@ -231,7 +245,7 @@ async function run() {
   assert(errors.length === 0, "page errors: " + errors.join(" | "));
   await browser.close();
   server.close();
-  console.log(`PASS — ${data.count} words, ${sched.waves} waves verified, scoring/slice/bomb/daily OK`);
+  console.log(`PASS — ${data.count} words, ${sched.waves} waves, ${airtime.avg.toFixed(1)}s hang time, scoring/slice/bomb/daily OK`);
 }
 
 run().catch((err) => { console.error("FAIL —", err.message); process.exit(1); });

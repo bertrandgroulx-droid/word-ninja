@@ -21,17 +21,26 @@ window.createWordNinja = function (ctx) {
   // ---- tunables --------------------------------------------------------------
   var CONFIG = {
     roundSec: 60,
-    gravity: 1.15,          // x arena height, per second squared
-    // Tuned against a simulation of how many words are actually formable from
-    // the tiles on screen: fewer or shorter-lived tiles left the player with
-    // nothing to cut about a fifth of the time, and never much beyond a
-    // three-letter word.
+    // Gravity sets how long a tile hangs, and hang time is the whole game.
+    // This is a WORD game: you have to read a dozen letters, find a word in
+    // them, and plan a path through it in the right order. At 1.15 a tile was
+    // airborne about two seconds, which is fine for cutting fruit on reflex and
+    // hopeless for thinking. At 0.26 it is four to five, which leaves room to
+    // look before you swipe.
+    gravity: 0.26,          // x arena height, per second squared
+    // Tuned against a simulation of how many words are formable from the tiles
+    // on screen: sparser or shorter-lived waves left nothing to cut about a
+    // fifth of the time, and rarely anything past three letters.
     rise: [0.52, 0.88],     // apex height as a fraction of the arena
     tileR: [22, 32],        // tile radius clamp, px
     tileRFrac: 0.072,       // ... as a fraction of arena width
-    waveGap: [1.15, 0.62],  // seconds between waves, start -> end of round
-    waveSize: [3, 5],       // tiles per wave, start -> end of round
-    maxLive: 20,
+    // Slower tiles linger, so waves have to thin out or the screen floods.
+    waveGap: [2.4, 1.6],    // seconds between waves, start -> end of round
+    waveSize: [4, 6],       // tiles per wave, start -> end of round
+    // A safety valve, not a limiter: peaks run near 21 tiles, and a cap that
+    // actually bites would drop tiles depending on frame timing, which would
+    // make the daily run differ between devices.
+    maxLive: 30,
     bombFrom: 8,            // no bombs in the first n seconds
     bombChance: 0.045,      // per tile, at most one per wave
     bombSec: 10,            // what cutting one costs
@@ -156,7 +165,7 @@ window.createWordNinja = function (ctx) {
           x: 0.12 + 0.76 * ((i + 0.5) / size) + (rand() - 0.5) * 0.1,
           rise: CONFIG.rise[0] + rand() * (CONFIG.rise[1] - CONFIG.rise[0]),
           drift: (rand() - 0.5) * 0.24,                     // sideways travel, fraction of width
-          spin: (rand() - 0.5) * 3.2,
+          spin: (rand() - 0.5) * 0.9,          // slow enough to read mid-flight
           delay: rand() * 0.22                              // stagger within the wave
         });
       }
