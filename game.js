@@ -16,7 +16,7 @@ window.createWordNinja = function (ctx) {
 
   var DICT = new Set(DATA.WORDS);
   var POINTS = DATA.POINTS;
-  var MIN_LEN = DATA.MIN;
+  // Shortest word in the dictionary. It is 1, because "a" and "i" are words.
 
   // ---- tunables --------------------------------------------------------------
   var CONFIG = {
@@ -51,6 +51,11 @@ window.createWordNinja = function (ctx) {
     maxClock: 90,           // time bonuses can't stretch a run past this
     trailMs: 260,
     penaltySec: 3,
+    // Anything shorter than this that isn't a word costs nothing. Single
+    // letters DO score when they are "a" or "i", so without this a stray clip
+    // through one wrong tile would cost three seconds, which is far too harsh
+    // for an accident.
+    freeBelow: 3,
     bonus: [[7, 4], [5, 2]], // [minLength, secondsAdded], first match wins
     multEvery: 3,           // valid words per multiplier step
     multMax: 5
@@ -293,12 +298,6 @@ window.createWordNinja = function (ctx) {
     buffer = [];
     if (!word.length) { renderWord(); return null; }
 
-    // A stray tap or a one-letter clip isn't a wrong answer, so it costs nothing.
-    if (word.length < MIN_LEN) {
-      flashWord("bad");
-      toast(MIN_LEN + " letters or more");
-      return { word: word, ok: false, scored: 0, reason: "short" };
-    }
     if (used[word]) {
       flashWord("bad");
       toast("Already cut " + word.toUpperCase());
@@ -307,6 +306,13 @@ window.createWordNinja = function (ctx) {
       return { word: word, ok: false, scored: 0, reason: "repeat" };
     }
     if (!DICT.has(word)) {
+      // A stray tap or a clipped letter or two isn't a wrong answer, it's an
+      // accident, so it costs nothing. Past that length it was a real attempt.
+      if (word.length < CONFIG.freeBelow) {
+        flashWord("bad");
+        toast("Not a word");
+        return { word: word, ok: false, scored: 0, reason: "short" };
+      }
       extra -= CONFIG.penaltySec;
       streak = 0;
       flashWord("bad");

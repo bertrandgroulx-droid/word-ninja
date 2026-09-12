@@ -64,14 +64,19 @@ async function run() {
       sorted: words.every((w, i) => i === 0 || words[i - 1] <= w),
       unique: set.size === words.length,
       hasCommon: ["cat", "stone", "ninja", "letter"].filter((w) => set.has(w)),
+      singles: words.filter((w) => w.length === 1),
+      twoLetter: words.filter((w) => w.length === 2).length,
       vowelShare: vowelWeight / total,
       letters: Object.keys(d.BAG).length
     };
   });
   assert(data.count > 8000, `dictionary should be substantial, got ${data.count}`);
   assert(data.shaped && data.unique && data.sorted, "dictionary is clean, unique and sorted");
-  assert(data.lengths[0] === 3 && data.lengths[data.lengths.length - 1] === 8,
-    `words run 3 to 8 letters, got ${data.lengths.join(",")}`);
+  assert(data.lengths[data.lengths.length - 1] === 8, `words top out at 8 letters, got ${data.lengths.join(",")}`);
+  // Exactly two single letters, and no two-letter words: "a" and "i" were added
+  // deliberately, the rest of the short Scrabble canon was not.
+  assert(data.singles.join("") === "ai", `only a and i stand alone, got ${data.singles.join(" ")}`);
+  assert(data.twoLetter === 0, `no two-letter words, got ${data.twoLetter}`);
   assert(data.hasCommon.includes("cat") && data.hasCommon.includes("stone"),
     `everyday words are present, found ${data.hasCommon.join(",")}`);
   assert(data.letters === 26, "every letter is in the bag");
@@ -197,12 +202,25 @@ async function run() {
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
 
-  // 9) Too short costs nothing; a repeat scores nothing.
+  // 9) A and I score on their own; other short cuts cost nothing.
+  const single = await play(page, "a");
+  assert(single.ok && single.scored > 0, `"a" is a word, got ${JSON.stringify(single)}`);
+  const alsoSingle = await play(page, "i");
+  assert(alsoSingle.ok, `"i" is a word, got ${JSON.stringify(alsoSingle)}`);
+  const beforeSlip = await state(page);
+  const slip = await play(page, "z");
+  assert(!slip.ok && slip.reason === "short", "a stray single letter is not a submission");
   const shortWord = await play(page, "an");
-  assert(!shortWord.ok && shortWord.reason === "short", "two letters is not a submission");
+  assert(!shortWord.ok && shortWord.reason === "short", "nor is a two-letter clip");
+  assert((await state(page)).remaining > beforeSlip.remaining - 0.5,
+    "and neither costs time, since a clip is an accident not a guess");
   const repeat = await play(page, "cat");
   assert(!repeat.ok && repeat.reason === "repeat", "the same word twice pays once");
-  assert((await state(page)).score === after.score, "no score from short or repeated words");
+  const repeatSingle = await play(page, "a");
+  assert(!repeatSingle.ok && repeatSingle.reason === "repeat",
+    "which caps A and I at one cut each per round");
+  assert((await state(page)).score === beforeSlip.score,
+    "and nothing in this group scores: slips and repeats are both free and worthless");
 
   // 10) A real drag across a real tile actually cuts it.
   const box = await page.$eval("#cv", (e) => {

@@ -108,15 +108,23 @@ for (const ch of alphabet) {
 const vowels = "aeiou";
 const vowelShare = vowels.split("").reduce((a, c) => a + weights[c], 0) / 1000;
 
+// "a" and "i" are words, and players expect to be able to cut them. No Scrabble
+// dictionary lists single letters, so they are added by hand. Deliberately just
+// these two: the rest of the two-letter Scrabble canon (aa, ab, ae, ...) is a
+// different decision and not one this list makes.
+words.push("a", "i");
+words.sort();
+
 const out = path.join(ROOT, "words.js");
 fs.writeFileSync(out, `// GENERATED FILE — do not edit by hand.
 // Rebuild with: npm run generate   (see tools/generate-words.mjs)
 //
-// WORDS  every accepted word, ${MIN} to ${MAX} letters, common enough to be fair.
+// WORDS  every accepted word: ${MIN} to ${MAX} letters and common enough to be
+//        fair, plus "a" and "i", the two single-letter words.
 // BAG    per-mille weight of each letter, measured across WORDS itself.
 // POINTS what each letter is worth, running inversely to how common it is.
 window.WORD_NINJA_DATA = {
-  MIN: ${MIN},
+  MIN: ${Math.min(...words.map((w) => w.length))},
   MAX: ${MAX},
   WORDS: "${words.join(" ")}".split(" "),
   BAG: ${JSON.stringify(weights)},

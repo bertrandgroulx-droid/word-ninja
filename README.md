@@ -32,8 +32,12 @@ Sixty seconds. Everything else follows from that.
   Too short, or a word you already cut, simply scores nothing.
 - **Bombs cost ten seconds** and void the word in your hand. Late in a run,
   that ends it.
-- **Missing a letter costs nothing.** Tiles you ignore fall away. Hesitation
-  costs opportunity, not points.
+- **Missing a letter costs nothing.** Tiles you ignore fall past. Hesitation
+  costs opportunity, not points. Nor does a clipped letter or two: below three
+  letters a non-word is treated as a slip, not a guess, and costs nothing.
+- **A and I count on their own**, and are the only single letters that do. No
+  Scrabble dictionary lists single letters, so they are added by hand, and the
+  no-repeat rule caps them at one cut each per round.
 
 **Slow or Fast** sets how long a tile takes to cross the screen, about ten
 seconds against seven. Slow is the default, chosen by play testing. Same letters, same scoring, more or less time to think. The first build
@@ -72,7 +76,9 @@ npm run generate    # needs network; caches its downloads in .cache/
 | [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) | Profanity, filtered out |
 | [First-name databases](https://github.com/smashew/NameDatabases) | Names, filtered out |
 
-That leaves about 15,000 words of three to eight letters.
+That leaves about 15,000 words of three to eight letters, plus "a" and "i" added
+by hand. Only those two: the rest of the two-letter Scrabble canon (aa, ab, ae
+and friends) is a separate decision this list does not make.
 
 The **letter bag is measured from those words**, not from English prose. Prose
 frequency over-weights the letters of common short function words, and a bag
