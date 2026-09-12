@@ -51,11 +51,10 @@ window.createWordNinja = function (ctx) {
     maxClock: 90,           // time bonuses can't stretch a run past this
     trailMs: 260,
     penaltySec: 3,
-    // Anything shorter than this that isn't a word costs nothing. Single
-    // letters DO score when they are "a" or "i", so without this a stray clip
-    // through one wrong tile would cost three seconds, which is far too harsh
-    // for an accident.
-    freeBelow: 3,
+    // Anything shorter than this that isn't a word costs nothing. Two letters
+    // is the shortest real word, so a lone clipped tile is always a slip and
+    // always free; two letters is a genuine attempt and pays the penalty.
+    freeBelow: 2,
     bonus: [[7, 4], [5, 2]], // [minLength, secondsAdded], first match wins
     multEvery: 3,           // valid words per multiplier step
     multMax: 5

@@ -72,11 +72,10 @@ async function run() {
   });
   assert(data.count > 8000, `dictionary should be substantial, got ${data.count}`);
   assert(data.shaped && data.unique && data.sorted, "dictionary is clean, unique and sorted");
-  assert(data.lengths[data.lengths.length - 1] === 8, `words top out at 8 letters, got ${data.lengths.join(",")}`);
-  // Exactly two single letters, and no two-letter words: "a" and "i" were added
-  // deliberately, the rest of the short Scrabble canon was not.
-  assert(data.singles.join("") === "ai", `only a and i stand alone, got ${data.singles.join(" ")}`);
-  assert(data.twoLetter === 0, `no two-letter words, got ${data.twoLetter}`);
+  assert(data.lengths[0] === 2 && data.lengths[data.lengths.length - 1] === 8,
+    `words run 2 to 8 letters, got ${data.lengths.join(",")}`);
+  assert(data.singles.length === 0, `no single letter counts, got ${data.singles.join(" ")}`);
+  assert(data.twoLetter > 40, `the two-letter words are there, got ${data.twoLetter}`);
   assert(data.hasCommon.includes("cat") && data.hasCommon.includes("stone"),
     `everyday words are present, found ${data.hasCommon.join(",")}`);
   assert(data.letters === 26, "every letter is in the bag");
@@ -202,25 +201,27 @@ async function run() {
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
 
-  // 9) A and I score on their own; other short cuts cost nothing.
-  const single = await play(page, "a");
-  assert(single.ok && single.scored > 0, `"a" is a word, got ${JSON.stringify(single)}`);
-  const alsoSingle = await play(page, "i");
-  assert(alsoSingle.ok, `"i" is a word, got ${JSON.stringify(alsoSingle)}`);
+  // 9) Two letters is the floor: a real two-letter word scores, a single tile
+  //    never does, and a wrong two-letter guess costs like any other.
+  const pair = await play(page, "ox");
+  assert(pair.ok && pair.scored > 0, `"ox" is a word, got ${JSON.stringify(pair)}`);
   const beforeSlip = await state(page);
-  const slip = await play(page, "z");
-  assert(!slip.ok && slip.reason === "short", "a stray single letter is not a submission");
-  const shortWord = await play(page, "an");
-  assert(!shortWord.ok && shortWord.reason === "short", "nor is a two-letter clip");
+  const slip = await play(page, "a");
+  assert(!slip.ok && slip.reason === "short", "a single tile is never a submission");
+  const alsoSlip = await play(page, "z");
+  assert(!alsoSlip.ok && alsoSlip.reason === "short", "whatever letter it is");
   assert((await state(page)).remaining > beforeSlip.remaining - 0.5,
-    "and neither costs time, since a clip is an accident not a guess");
+    "and it costs no time, since one clipped tile is an accident not a guess");
+  const wrongPair = await play(page, "eb");
+  assert(!wrongPair.ok && wrongPair.reason === "unknown", "a two-letter non-word is a real guess");
+  assert((await state(page)).remaining < beforeSlip.remaining - 2.5, "so it costs three seconds");
   const repeat = await play(page, "cat");
   assert(!repeat.ok && repeat.reason === "repeat", "the same word twice pays once");
-  const repeatSingle = await play(page, "a");
-  assert(!repeatSingle.ok && repeatSingle.reason === "repeat",
-    "which caps A and I at one cut each per round");
+  const repeatPair = await play(page, "ox");
+  assert(!repeatPair.ok && repeatPair.reason === "repeat",
+    "which caps the cheap two-letter words at one cut each per round");
   assert((await state(page)).score === beforeSlip.score,
-    "and nothing in this group scores: slips and repeats are both free and worthless");
+    "and nothing since OX has scored: slips, wrong guesses and repeats all pay nothing");
 
   // 10) A real drag across a real tile actually cuts it.
   const box = await page.$eval("#cv", (e) => {
