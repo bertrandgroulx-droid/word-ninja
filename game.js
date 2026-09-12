@@ -21,32 +21,30 @@ window.createWordNinja = function (ctx) {
   // ---- tunables --------------------------------------------------------------
   var CONFIG = {
     roundSec: 60,
-    // Gravity sets how long a tile hangs, and hang time is the whole game.
-    // This is a WORD game: you have to read a dozen letters, find a word in
-    // them, and plan a path through it in the right order. The first build ran
-    // at 1.15, about two seconds airborne, which is fine for cutting fruit on
-    // reflex and hopeless for thinking. Both speeds have since come down twice
-    // on play-test feedback; what reads as "fast" here is still very floaty by
-    // arcade standards, and deliberately so.
+    // Tiles fall from the top and leave at the bottom, at a CONSTANT speed
+    // rather than under gravity. An arc spends its slowest, most readable
+    // moment at the apex and its fastest at the edges; a steady fall gives the
+    // same reading time everywhere on screen and lets you plan a path ahead of
+    // where the tiles are now. This is a word game, and predictability is worth
+    // more than drama.
     //
-    // Each speed pairs a gravity with a wave gap, because slower tiles linger:
-    // hold the gap steady and the screen floods. These pairings both leave
-    // about a dozen tiles up at once, so only the pace changes.
+    // Each speed is a crossing time paired with a wave gap. Slower tiles linger,
+    // so the gap has to stretch with them or the screen floods; as paired, both
+    // hold about a dozen tiles at once and only the pace changes.
     speeds: {
-      slow: { gravity: 0.06, waveGap: [4.6, 3.4] },   // ~9.7s airborne
-      fast: { gravity: 0.12, waveGap: [3.4, 2.4] }    // ~6.8s airborne
+      slow: { fallSec: 9.7, waveGap: [4.6, 3.4] },
+      fast: { fallSec: 6.8, waveGap: [3.4, 2.4] }
     },
-    // Tuned against a simulation of how many words are formable from the tiles
-    // on screen: sparser or shorter-lived waves left nothing to cut about a
-    // fifth of the time, and rarely anything past three letters.
-    rise: [0.52, 0.88],     // apex height as a fraction of the arena
+    // Per-tile variation on the crossing time, so a wave doesn't descend in
+    // lockstep like a wall.
+    fallSpread: [0.85, 1.2],
     tileR: [22, 32],        // tile radius clamp, px
     tileRFrac: 0.072,       // ... as a fraction of arena width
     waveSize: [4, 6],       // tiles per wave, start -> end of round
-    // A safety valve, not a limiter: peaks run near 21 tiles, and a cap that
-    // actually bites would drop tiles depending on frame timing, which would
-    // make the daily run differ between devices.
-    maxLive: 30,
+    // A safety valve, not a limiter. Peaks run near 24 on screen, plus tiles
+    // still waiting to enter. A cap that actually bit would drop tiles
+    // depending on frame timing, making the daily run differ between devices.
+    maxLive: 44,
     bombFrom: 8,            // no bombs in the first n seconds
     bombChance: 0.045,      // per tile, at most one per wave
     bombSec: 10,            // what cutting one costs
@@ -172,12 +170,16 @@ window.createWordNinja = function (ctx) {
         wave.push({
           ch: isBomb ? "*" : "",                            // letters are filled in below
           bomb: isBomb,
-          // Spread launch points across the width, keeping clear of the edges.
+          // Spread entry points across the width, keeping clear of the edges.
           x: 0.12 + 0.76 * ((i + 0.5) / size) + (rand() - 0.5) * 0.1,
-          rise: CONFIG.rise[0] + rand() * (CONFIG.rise[1] - CONFIG.rise[0]),
+          // Multiplier on the speed's crossing time: below 1 falls faster.
+          fall: CONFIG.fallSpread[0] + rand() * (CONFIG.fallSpread[1] - CONFIG.fallSpread[0]),
           drift: (rand() - 0.5) * 0.24,                     // sideways travel, fraction of width
-          spin: (rand() - 0.5) * 0.9,          // slow enough to read mid-flight
-          delay: rand() * 0.22                              // stagger within the wave
+          spin: (rand() - 0.5) * 0.9,                       // slow enough to read mid-fall
+          // Spread the wave's entries across most of the gap to the next one.
+          // Released together they descend as a horizontal band with dead space
+          // between bands; spread out they read as a steady drizzle.
+          delay: rand() * gap * 0.85
         });
       }
 
@@ -199,18 +201,16 @@ window.createWordNinja = function (ctx) {
   function release(wave) {
     wave.tiles.forEach(function (spec) {
       if (tiles.length >= CONFIG.maxLive) return;
-      var grav = tuning().gravity * H;
-      var rise = spec.rise * H;
-      var vy = -Math.sqrt(2 * grav * rise);          // exactly enough to reach the apex
-      var air = (-2 * vy) / grav;                    // seconds from launch to landing
+      var travel = H + R * 3;                        // just above the top to just below the floor
+      var cross = tuning().fallSec * spec.fall;      // seconds to make that trip
       tiles.push({
         id: nextId++,
         ch: spec.ch,
         bomb: spec.bomb,
         x: spec.x * W,
-        y: H + R,
-        vx: (spec.drift * W) / air,
-        vy: vy,
+        y: -R,
+        vx: (spec.drift * W) / cross,
+        vy: travel / cross,                          // constant: no acceleration
         rot: 0,
         vrot: spec.spin,
         wait: spec.delay,
@@ -220,15 +220,13 @@ window.createWordNinja = function (ctx) {
   }
 
   function stepTiles(dt) {
-    var grav = tuning().gravity * H;
     for (var i = tiles.length - 1; i >= 0; i--) {
       var t = tiles[i];
       if (t.wait > 0) { t.wait -= dt; continue; }
       t.x += t.vx * dt;
-      t.y += t.vy * dt;
-      t.vy += grav * dt;
+      t.y += t.vy * dt;                            // constant speed, no gravity term
       t.rot += t.vrot * dt;
-      if (t.y > H + R * 2.5) tiles.splice(i, 1);   // fell away, no penalty
+      if (t.y > H + R * 2) tiles.splice(i, 1);     // fell past the floor, no penalty
     }
   }
 
@@ -782,7 +780,7 @@ window.createWordNinja = function (ctx) {
       state: function () {
         return {
           phase: phase, mode: mode, speed: speed, score: score, streak: streak,
-          gravity: tuning().gravity,
+          fallSec: tuning().fallSec,
           mult: multiplier(), remaining: remaining(), buffer: buffer.join(""),
           tiles: tiles.length, words: cut.map(function (c) { return c.word; }),
           waves: schedule.length

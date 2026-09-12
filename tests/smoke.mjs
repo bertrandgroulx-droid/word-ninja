@@ -110,10 +110,10 @@ async function run() {
       lastWave: a[a.length - 1].t,
       bombs: bombs.length,
       earliestBomb: Math.min(...a.filter((w) => w.tiles.some((t) => t.bomb)).map((w) => w.t)),
-      // Launch across the width, and high enough to be reachable without
-      // sailing off the top. The exact band is a tuning knob; these are the
-      // limits beyond which the tile is unplayable.
-      inBounds: tiles.every((t) => t.x > 0.05 && t.x < 0.95 && t.rise > 0.3 && t.rise < 0.95),
+      // Enter across the width, at a crossing speed near the nominal one. The
+      // exact band is a tuning knob; these are the limits beyond which a tile
+      // is off screen or streaking past unreadably.
+      inBounds: tiles.every((t) => t.x > 0.05 && t.x < 0.95 && t.fall > 0.5 && t.fall < 2),
       lettersOnly: tiles.every((t) => t.bomb || /^[a-z]$/.test(t.ch)),
       vowelWaves: a.filter((w) => {
         const letters = w.tiles.filter((t) => !t.bomb);
@@ -131,15 +131,16 @@ async function run() {
   assert(sched.vowelWaves === 0, `every wave of 2+ has a vowel, ${sched.vowelWaves} without`);
   assert(sched.bombs > 0 && sched.earliestBomb >= 8, `bombs arrive, but not early: ${sched.earliestBomb}`);
 
-  // 5) Tiles hang long enough to read and plan around. This is a word game:
-  //    at two seconds it was unplayable, whatever the other numbers said.
+  // 5) Tiles cross the screen slowly enough to read and plan around. This is a
+  //    word game: the first build crossed in two seconds and was unplayable,
+  //    whatever the other numbers said.
   const hang = async () => page.evaluate(() => {
     const st = window.game._debug.state();
     const s = window.game._debug.schedule("airtime");
     const tiles = s.flatMap((w) => w.tiles);
-    // Matches the launch maths in release(): a tile is airborne
-    // 2 * sqrt(2 * rise / gravity) seconds, both in arena-height units.
-    const secs = tiles.map((t) => 2 * Math.sqrt(2 * t.rise / st.gravity));
+    // Matches release(): a tile crosses the screen in fallSec x its own
+    // multiplier, at constant speed.
+    const secs = tiles.map((t) => st.fallSec * t.fall);
     const gaps = s.slice(1).map((w, i) => w.t - s[i].t);
     // Roughly how many tiles are up at once: each wave's tiles times how many
     // wave-gaps they stay airborne.
@@ -152,7 +153,7 @@ async function run() {
   });
   const fast = await hang();
   assert(fast.speed === "fast", "opens on the fast speed");
-  assert(fast.min > 3.5, `tiles hang long enough to read, min ${fast.min.toFixed(1)}s`);
+  assert(fast.min > 4, `tiles stay on screen long enough to read, min ${fast.min.toFixed(1)}s`);
   assert(fast.avg > 6 && fast.avg < 8, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
 
   // Slow is a real difference, and thins its waves so the screen doesn't flood.
