@@ -64,6 +64,7 @@ window.createWordNinja = function (ctx) {
   var els = {
     arena: $("arena"), score: $("score"), mult: $("mult"), clock: $("clock"),
     timeFill: $("timeFill"), word: $("word"), pops: $("pops"), toast: $("toast"),
+    wordCount: $("wordCount"),
     modeDaily: $("modeDaily"), modePractice: $("modePractice"), helpBtn: $("helpBtn"),
     startBack: $("startBack"), startTitle: $("startTitle"), startSub: $("startSub"),
     startBest: $("startBest"), startBtn: $("startBtn"), startHelp: $("startHelp"),
@@ -536,6 +537,7 @@ window.createWordNinja = function (ctx) {
 
   function renderHud() {
     els.score.textContent = String(score);
+    els.wordCount.textContent = "(" + cut.length + ")";
     var left = remaining();
     els.clock.textContent = mmss(Math.ceil(left));
     els.clock.classList.toggle("low", left <= 10);

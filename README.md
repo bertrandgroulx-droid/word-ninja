@@ -20,10 +20,20 @@ and lift to submit. No accounts, no network calls, no build step.
 Sixty seconds. Everything else follows from that.
 
 - **A word scores the sum of its letter values, times its length.** So length
-  pays twice over, and rare letters pay too: CAT is 18 and BOX is 45, both three
-  letters. Each tile carries its value in the corner. Values run from 1 for
-  `a e i r s` up to 10 for `j q x z`, derived from how often each letter appears
-  in this dictionary rather than copied from Scrabble.
+  pays twice over, and rare letters pay too. Each tile carries its value in the
+  corner:
+
+  | Word | Letters | | Score |
+  |---|---|---|---|
+  | PUT | 3 + 3 + 2 = 8 | × 3 | 24 |
+  | PAN | 3 + 1 + 2 = 6 | × 3 | 18 |
+  | SAD | 1 + 1 + 2 = 4 | × 3 | 12 |
+
+  Values run from 1 for `a e i r s` up to 10 for `j q x z`, derived from how
+  often each letter appears in this dictionary rather than copied from Scrabble.
+  The rules card in the game shows this same worked example, since "why did
+  those two both-three-letter words score differently" is the question players
+  actually ask.
 - **Long words buy time.** Five letters adds two seconds, seven adds four. A
   good run sustains itself, up to a ceiling of ninety seconds on the clock.
 - **Three valid words in a row doubles your score**, and a longer streak pushes

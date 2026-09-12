@@ -94,6 +94,8 @@
     font-variant-numeric: tabular-nums;
   }
   .hud .score { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+  /* Words cut so far, sitting with the score it explains. */
+  .hud .words { font-size: 0.95rem; font-weight: 700; color: var(--muted); margin-left: -3px; }
   .hud .mult {
     font-size: 0.78rem; font-weight: 800; color: var(--warn);
     border: 1px solid rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.10);
@@ -193,6 +195,24 @@
     color: var(--good); border-radius: 999px; padding: 2px 8px;
   }
   .cut-list span b { color: var(--muted); font-weight: 700; margin-left: 3px; }
+  .cut-note { font-size: 0.7rem; color: var(--muted); margin: 8px 0 0; }
+
+  /* Worked scoring examples in the rules. */
+  .sums {
+    width: 100%; border-collapse: collapse; margin: 0 0 12px;
+    font-size: 0.84rem; font-variant-numeric: tabular-nums;
+  }
+  .sums th, .sums td { padding: 4px 6px; text-align: left; }
+  .sums th { font-weight: 800; letter-spacing: 0.04em; width: 3.4rem; }
+  .sums td { color: var(--muted); }
+  .sums .tot { color: var(--good); font-weight: 800; text-align: right; }
+  .sums tr + tr { border-top: 1px solid var(--border); }
+
+  .vals { display: flex; flex-direction: column; gap: 3px; margin: 0 0 4px;
+    font-size: 0.8rem; color: var(--muted); text-align: left;
+    text-transform: uppercase; letter-spacing: 0.08em; }
+  .vals b { display: inline-block; width: 1.8rem; color: var(--text);
+    letter-spacing: 0; text-transform: none; }
 
   .toast {
     position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); z-index: 15;
@@ -216,6 +236,7 @@
 
   <div class="hud">
     <span class="score" id="score">0</span>
+    <span class="words" id="wordCount">(0)</span>
     <span class="mult hidden-soft" id="mult">×2</span>
     <span class="clock" id="clock">1:00</span>
   </div>
@@ -256,6 +277,7 @@
           <div class="st"><div class="v" id="stBest">—</div><div class="l">Best cut</div></div>
         </div>
         <div class="cut-list" id="cutList"></div>
+        <p class="cut-note">letter values added up, times the number of letters</p>
         <button type="button" class="primary" id="againBtn">Play again</button>
         <button type="button" id="shareBtn">Share result</button>
       </div>
@@ -270,11 +292,7 @@
           <li><b>Lift your finger</b> to submit. Two letters or more, so a single
             tile never scores.</li>
           <li>Letters are cut in the order you touch them, so plan the path.</li>
-          <li>Long words pay far more, and five letters or longer <b>buy you time</b>.</li>
-          <li><b>Rare letters pay more too.</b> The small number on a tile is what
-            that letter is worth, and a word scores the sum of its letters times
-            how many there are. So CAT is 18 and BOX is 45, both three letters.
-            Short and rare beats short and common: OX pays 24, IS pays 4.</li>
+          <li>Five letters or longer <b>buys you time</b> as well as points.</li>
           <li>A wrong word costs three seconds and drops your multiplier. One
             stray letter costs nothing, so a slip is only a slip.</li>
           <li>Cut three words in a row for ×2, and keep going for more.</li>
@@ -286,6 +304,24 @@
         </ul>
         <p>Missing a letter costs nothing. Let the bad ones fall past.</p>
         <p>The clock tops out at a minute and a half, however well you cut.</p>
+
+        <h2>Why words of the same length score differently</h2>
+        <p>Every letter has a value, printed small on its tile. A word scores
+          <b>the sum of its letters, times how many letters it has</b>.</p>
+        <table class="sums">
+          <tr><th>PUT</th><td>3 + 3 + 2 = 8</td><td>× 3</td><td class="tot">24</td></tr>
+          <tr><th>PAN</th><td>3 + 1 + 2 = 6</td><td>× 3</td><td class="tot">18</td></tr>
+          <tr><th>SAD</th><td>1 + 1 + 2 = 4</td><td>× 3</td><td class="tot">12</td></tr>
+        </table>
+        <p>All three letters long, and all worth different amounts, because P is
+          rarer than S. Length still matters most, since it multiplies.</p>
+        <div class="vals">
+          <div><b>1</b> a e i r s</div>
+          <div><b>2</b> d l n o t</div>
+          <div><b>3</b> b c g h m p u</div>
+          <div><b>4</b> f k v w y</div>
+          <div><b>10</b> j q x z</div>
+        </div>
         <button type="button" class="primary" id="helpClose">Got it</button>
       </div>
     </div>
