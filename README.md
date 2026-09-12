@@ -81,11 +81,40 @@ npm run generate    # needs network; caches its downloads in .cache/
 
 | Source | Used for |
 |---|---|
-| [TWL Scrabble dictionary](https://github.com/redbo/scrabble) | What counts as a word. Scrabble lists carry no proper nouns |
-| [OpenSubtitles frequency list](https://github.com/hermitdave/FrequencyWords) | Which of those a player is likely to know |
+| [TWL Scrabble dictionary](https://github.com/redbo/scrabble) | What the game **accepts**. Scrabble lists carry no proper nouns |
+| [OpenSubtitles frequency list](https://github.com/hermitdave/FrequencyWords) | Which of those are **common**, which is a different job — see below |
 | [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) | Profanity, filtered out |
 
-That leaves about 16,400 words of two to eight letters.
+Two lists come out of that, and keeping them apart is the whole design.
+
+**Accepted: 83,488 words**, every Scrabble word of two to eight letters. If a
+board would take it, this takes it. That is a recent change: the game used to
+accept only the 16,400 common ones, and a player asked whether `DEET` counted.
+It is in the Scrabble dictionary, so it does now, along with `QOPH`, `ZARF` and
+80,000 others.
+
+**Common: 16,398 words**, the frequency-gated subset. This never reaches the
+player as a rule. It is what the letter bag and the letter values are measured
+from, so the tiles that fall are the ones that finish words people know.
+
+Widening what is *accepted* is pure upside: more of what you try works, and
+nothing you already knew stops working. Widening what is *dealt* is not — a bag
+measured over the whole Scrabble dictionary weights letters toward words nobody
+is going to spot mid-drag. So the bag and the points are byte-identical to what
+they were, which also means the daily runs deal exactly the letters they did
+before.
+
+One consequence worth naming: the hundred two-letter Scrabble words are all live
+now, and several are expensive. `ZA` is 22 points for two tiles. Knowing that
+list is real Scrabble skill and the game pays for it, which is the same bargain
+`QI` and `XU` were already making.
+
+The whole list would be 649 KB of text, so it ships **front-coded** — each word
+stored as a digit for how many leading letters it shares with the word before,
+then the rest of it. That is 243 KB, about 103 KB gzipped, and it unpacks into a
+`Set` in roughly a tenth of a second on a throttled phone, once, before the first
+round. The digit sorts below `a` and every letter above it, which is all the
+decoder needs to find a boundary.
 
 There is deliberately **no first-names filter**. An early version had one and it
 threw away 813 ordinary words, `WILL` `BILL` `ROSE` `GRACE` `HOPE` `ART` `DAWN`
