@@ -94,6 +94,16 @@ async function run() {
 
   // 3) Help opens on a first visit; the start card waits behind it.
   assert(await page.$eval("#helpBack", (e) => !e.classList.contains("hidden")), "help opens first time");
+  // The worked example is the first thing in the rules, and it has to be drawn
+  // rather than merely present: a zero-height SVG is the classic silent failure.
+  const demo = await page.$eval("#helpBack .demo svg", (e) => {
+    const r = e.getBoundingClientRect();
+    return { w: r.width, h: r.height, tiles: e.querySelectorAll("rect[rx='10']").length };
+  });
+  assert(demo.w > 200 && demo.h > 100, `the example renders at a usable size, got ${demo.w}x${demo.h}`);
+  assert(demo.tiles === 3, `three tiles are cut in the example, got ${demo.tiles}`);
+  assert(/CAT/.test(await page.$eval("#helpBack .demo figcaption", (e) => e.textContent)),
+    "and the caption does the arithmetic");
   await page.click("#helpClose");
   assert(await page.$eval("#startBack", (e) => !e.classList.contains("hidden")), "start card is showing");
   assert((await state(page)).phase === "ready", "waiting to start");

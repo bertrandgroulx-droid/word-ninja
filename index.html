@@ -174,6 +174,19 @@
   }
   .card > button.primary { background: var(--accent); color: #14060a; border-color: transparent; }
 
+  /* The worked cut at the top of the rules. */
+  .demo { margin: 0 0 14px; }
+  .demo svg { width: 100%; height: auto; max-width: 100%; display: block; }
+  .demo .ch { fill: #14171f; font: 800 24px system-ui, sans-serif; text-anchor: middle; }
+  .demo .pt { fill: rgba(20,23,31,0.72); font: 800 11px system-ui, sans-serif; text-anchor: middle; }
+  .demo .bomb { font-size: 21px; text-anchor: middle; }
+  .demo .ord circle { fill: var(--accent); }
+  .demo .ord text { fill: #14060a; font: 800 11px system-ui, sans-serif; text-anchor: middle; }
+  .demo figcaption {
+    margin-top: 8px; font-size: 0.8rem; line-height: 1.45; color: var(--muted); text-align: left;
+  }
+  .demo figcaption b { color: var(--text); }
+
   /* Speed lives on the start card, not the top bar: it is a choice you make
      before a run, and three controls don't fit a narrow phone. */
   .speed-row {
@@ -287,6 +300,63 @@
     <div class="backdrop hidden" id="helpBack">
       <div class="card">
         <h2>How to play</h2>
+
+        <!-- What a cut looks like. Drawn inline rather than shipped as an image
+             so it scales and stays in the palette. -->
+        <figure class="demo">
+          <svg viewBox="0 0 300 176" role="img" aria-labelledby="demoTitle">
+            <title id="demoTitle">A blade path cutting the tiles C, A and T in
+              order, passing under a bomb and ignoring a Z tile.</title>
+            <rect x="1" y="1" width="298" height="174" rx="12"
+              fill="#0d0f14" stroke="rgba(255,255,255,0.10)" />
+
+            <!-- tiles you leave alone -->
+            <g transform="translate(58 34) rotate(-11)">
+              <rect x="-21" y="-21" width="42" height="42" rx="9" fill="#e9eef7" opacity="0.45" />
+              <text x="0" y="7" class="ch">Z</text>
+              <text x="12" y="16" class="pt">10</text>
+            </g>
+            <g transform="translate(212 30)">
+              <circle r="20" fill="#1a1016" stroke="#ff4d5e" stroke-width="2" />
+              <text x="0" y="7" class="bomb">💣</text>
+            </g>
+
+            <!-- the blade, laid down before the tiles it cuts -->
+            <path d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
+              fill="none" stroke="#56e0ff" stroke-opacity="0.28" stroke-width="11" stroke-linecap="round" />
+            <path d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
+              fill="none" stroke="#56e0ff" stroke-width="3" stroke-linecap="round" />
+
+            <!-- tiles you cut, in this order -->
+            <g transform="translate(66 112) rotate(-6)">
+              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+              <text x="0" y="8" class="ch">C</text>
+              <text x="13" y="18" class="pt">3</text>
+            </g>
+            <g transform="translate(150 84) rotate(5)">
+              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+              <text x="0" y="8" class="ch">A</text>
+              <text x="13" y="18" class="pt">1</text>
+            </g>
+            <g transform="translate(236 116) rotate(-3)">
+              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+              <text x="0" y="8" class="ch">T</text>
+              <text x="13" y="18" class="pt">2</text>
+            </g>
+
+            <!-- the order the finger met them -->
+            <g class="ord">
+              <circle cx="42" cy="90" r="9" /><text x="42" y="94">1</text>
+              <circle cx="126" cy="62" r="9" /><text x="126" y="66">2</text>
+              <circle cx="212" cy="94" r="9" /><text x="212" y="98">3</text>
+            </g>
+          </svg>
+          <figcaption>
+            One drag, three tiles, in the order you touch them.
+            <b>CAT</b> scores 3 + 1 + 2 = 6, times 3 letters = <b>18</b>.
+            The Z was worth more, but Z alone is not a word.
+          </figcaption>
+        </figure>
         <ul>
           <li>Letters fall from the top. <b>Drag through them</b> to cut them into your word.</li>
           <li><b>Lift your finger</b> to submit. Two letters or more, so a single

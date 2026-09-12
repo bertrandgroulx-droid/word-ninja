@@ -143,6 +143,18 @@ spread across most of the gap to the next wave, rather than together: released
 at once they descend as a horizontal band with dead space between bands, and
 spread out they read as a steady drizzle.
 
+## The rules card
+
+The in-game rules open with a drawn example rather than a wall of bullets: three
+tiles cut in numbered order by a blade path, a bomb it steers around, and a
+high-value Z it ignores because a single letter is not a word. The caption does
+the arithmetic. It is inline SVG, so it scales with the card and stays in the
+palette without shipping an image.
+
+Below the bullets, scoring gets its own section, because "why did those two
+three-letter words score differently" is the question players actually ask, and
+one dense sentence in a list of ten was not answering it.
+
 ## Testing
 
 An arcade game can't be tested by chasing flying tiles, so `tests/smoke.mjs`
