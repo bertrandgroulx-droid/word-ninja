@@ -70,7 +70,8 @@ window.createWordNinja = function (ctx) {
     startBest: $("startBest"), startBtn: $("startBtn"), startHelp: $("startHelp"),
     overBack: $("overBack"), overTitle: $("overTitle"), overSub: $("overSub"),
     stScore: $("stScore"), stWords: $("stWords"), stBest: $("stBest"),
-    cutList: $("cutList"), againBtn: $("againBtn"), shareBtn: $("shareBtn"),
+    cutList: $("cutList"), cutMore: $("cutMore"),
+    againBtn: $("againBtn"), shareBtn: $("shareBtn"),
     speedSlow: $("speedSlow"), speedFast: $("speedFast"),
     helpBack: $("helpBack"), helpClose: $("helpClose")
   };
@@ -280,11 +281,12 @@ window.createWordNinja = function (ctx) {
     return Math.min(CONFIG.multMax, 1 + Math.floor(streak / CONFIG.multEvery));
   }
 
-  function wordValue(word) {
+  function letterSum(word) {
     var sum = 0;
     for (var i = 0; i < word.length; i++) sum += POINTS[word[i]] || 1;
-    return sum * word.length;
+    return sum;
   }
+  function wordValue(word) { return letterSum(word) * word.length; }
 
   function timeBonus(len) {
     for (var i = 0; i < CONFIG.bonus.length; i++) {
@@ -330,7 +332,7 @@ window.createWordNinja = function (ctx) {
     if (remaining() > CONFIG.maxClock) extra = CONFIG.maxClock + elapsed - CONFIG.roundSec;
     streak++;
     used[word] = true;
-    cut.push({ word: word, points: gained });
+    cut.push({ word: word, sum: letterSum(word), mult: mult, points: gained });
     flashWord("good");
     pop(W / 2, H * 0.62,
       "+" + gained + (mult > 1 ? " ×" + mult : "") + (bonus ? "  +" + bonus + "s" : ""), "good");
@@ -648,15 +650,24 @@ window.createWordNinja = function (ctx) {
     els.stWords.textContent = String(cut.length);
     els.stBest.textContent = ranked.length ? ranked[0].word.toUpperCase() : "—";
 
+    // Show the arithmetic, not just the answer: letter values, times the
+    // number of letters, times the streak multiplier where one applied.
     els.cutList.innerHTML = "";
     ranked.slice(0, 12).forEach(function (c) {
-      var s = document.createElement("span");
-      s.textContent = c.word;
-      var b = document.createElement("b");
-      b.textContent = c.points;
-      s.appendChild(b);
-      els.cutList.appendChild(s);
+      var row = document.createElement("tr");
+      var word = document.createElement("th");
+      word.textContent = c.word;
+      var work = document.createElement("td");
+      work.textContent = c.sum + " × " + c.word.length + (c.mult > 1 ? " × " + c.mult : "");
+      var total = document.createElement("td");
+      total.className = "tot";
+      total.textContent = c.points;
+      row.appendChild(word);
+      row.appendChild(work);
+      row.appendChild(total);
+      els.cutList.appendChild(row);
     });
+    els.cutMore.textContent = cut.length > 12 ? "and " + (cut.length - 12) + " more" : "";
 
     els.againBtn.textContent = mode === "daily" ? "Practice run" : "Play again";
     els.overBack.classList.remove("hidden");

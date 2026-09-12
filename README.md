@@ -155,6 +155,19 @@ Below the bullets, scoring gets its own section, because "why did those two
 three-letter words score differently" is the question players actually ask, and
 one dense sentence in a list of ten was not answering it.
 
+The results card then shows the same arithmetic for every word of the run, so
+the answer is there whether or not anyone opened the rules:
+
+```
+QUIZ     24 × 4 × 2     192
+STRING   10 × 6 × 2     120
+PUT       8 × 3          24
+```
+
+Letter values, times the number of letters, times the streak multiplier where
+one applied. The test multiplies each row out and checks it equals that row's
+total, and that the rows sum to the score.
+
 ## Testing
 
 An arcade game can't be tested by chasing flying tiles, so `tests/smoke.mjs`

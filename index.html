@@ -201,14 +201,11 @@
   .stats .st .v { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   .stats .st .l { font-size: 0.64rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
-  .cut-list { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 10px; }
-  .cut-list span {
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.28);
-    color: var(--good); border-radius: 999px; padding: 2px 8px;
-  }
-  .cut-list span b { color: var(--muted); font-weight: 700; margin-left: 3px; }
+  /* The run's words, scored the same way the rules explain it. */
+  .cuts { margin-top: 12px; }
+  .cuts th { text-transform: uppercase; letter-spacing: 0.04em; }
   .cut-note { font-size: 0.7rem; color: var(--muted); margin: 8px 0 0; }
+  #cutMore:empty { display: none; }
 
   /* Worked scoring examples in the rules. */
   .sums {
@@ -289,8 +286,12 @@
           <div class="st"><div class="v" id="stWords">0</div><div class="l">Words</div></div>
           <div class="st"><div class="v" id="stBest">—</div><div class="l">Best cut</div></div>
         </div>
-        <div class="cut-list" id="cutList"></div>
-        <p class="cut-note">letter values added up, times the number of letters</p>
+        <table class="sums cuts">
+          <tbody id="cutList"></tbody>
+        </table>
+        <p class="cut-note" id="cutMore"></p>
+        <p class="cut-note">letter values, times the number of letters, times the
+          streak multiplier where you had one</p>
         <button type="button" class="primary" id="againBtn">Play again</button>
         <button type="button" id="shareBtn">Share result</button>
       </div>

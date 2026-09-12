@@ -289,7 +289,22 @@ async function run() {
   // number and lists them, rather than a figure hardcoded here.
   assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
     `results count the ${cutSoFar} words cut`);
-  assert((await page.$$eval("#cutList span", (e) => e.length)) === cutSoFar, "the words are listed");
+  assert((await page.$$eval("#cutList tr", (e) => e.length)) === cutSoFar, "the words are listed");
+  // Each row shows its working, and the working has to agree with the total.
+  const rows = await page.$$eval("#cutList tr", (trs) => trs.map((tr) => ({
+    word: tr.querySelector("th").textContent,
+    work: tr.children[1].textContent,
+    total: Number(tr.querySelector(".tot").textContent)
+  })));
+  for (const r of rows) {
+    const parts = r.work.split("×").map((n) => Number(n.trim()));
+    assert(parts.length >= 2 && parts.every((n) => n > 0), `${r.word} shows its working, got "${r.work}"`);
+    assert(parts.reduce((a, b) => a * b, 1) === r.total,
+      `${r.word}: ${r.work} should equal ${r.total}`);
+    assert(parts[1] === r.word.length, `${r.word} multiplies by its own length, got ${parts[1]}`);
+  }
+  assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#stScore", (e) => e.textContent)),
+    "and the rows add up to the score");
 
   // 13) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {
