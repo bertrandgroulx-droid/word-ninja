@@ -217,6 +217,16 @@ async function run() {
   const before = (await state(page)).remaining;
   const dud = await play(page, "zzzzq");
   assert(!dud.ok && dud.reason === "unknown", "gibberish is rejected");
+  // The rejection names what was cut. Without that, a player who meant BUT and
+  // caught the tiles as BTU is certain a real word was refused.
+  assert((await page.$eval("#toast", (e) => e.textContent)) === "ZZZZQ is not a word",
+    `the rejection names the word, got "${await page.$eval("#toast", (e) => e.textContent)}"`);
+  // The same three tiles in the wrong order really is a different word.
+  const scrambled = await page.evaluate(() => {
+    const S = new Set(window.WORD_NINJA_DATA.WORDS);
+    return { but: S.has("but"), btu: S.has("btu") };
+  });
+  assert(scrambled.but && !scrambled.btu, "BUT is a word and BTU is not");
   const after = await state(page);
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
