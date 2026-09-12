@@ -21,10 +21,8 @@ const SOURCES = {
   "twl.txt": "https://raw.githubusercontent.com/redbo/scrabble/master/dictionary.txt",
   // 50k words by frequency: decides which of them a player is likely to know.
   "en_50k.txt": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt",
-  // Profanity and first names, both filtered out.
-  "bad.txt": "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en",
-  "names1.txt": "https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt",
-  "names2.txt": "https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt"
+  // Profanity, filtered out.
+  "bad.txt": "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en"
 };
 
 async function fetchSources() {
@@ -45,6 +43,12 @@ const lines = (s) => s.split("\n").map((w) => w.trim().toLowerCase()).filter(Boo
 
 await fetchSources();
 
+// There is deliberately NO first-names filter. An early version had one, and it
+// threw away 813 ordinary words, WILL BILL ROSE GRACE HOPE ART DAWN MAY JACK
+// CHASE among them, because thousands of English words are also somebody's
+// name. It was redundant as well as harmful: a Scrabble dictionary contains no
+// proper nouns, so HELEN, SANTA and MOORE are already absent from this list
+// while WILL and ROSE are correctly present. The dictionary is the authority.
 const valid = new Set(lines(readCache("twl.txt")));
 
 const rank = new Map();
@@ -61,9 +65,11 @@ for (const w of ["fags", "coon", "coons", "wank", "wanks", "spic", "spics", "kik
   "cunt", "cunts", "jizz", "cums", "turd", "turds", "crap", "craps", "damn", "hell",
   "arse", "arses", "rape", "rapes", "raped", "nazi", "nazis", "slut", "sluts", "whore",
   "whores", "piss", "pissed", "homo", "homos", "shag", "shags", "prick", "pricks",
-  "slave", "slaves", "urine", "scum", "casa", "senor", "pasha"]) bad.add(w);
-
-const names = new Set([...lines(readCache("names1.txt")), ...lines(readCache("names2.txt"))]);
+  "slave", "slaves", "urine", "scum", "casa", "senor", "pasha",
+  // These were only ever excluded as a side effect of the first-names filter.
+  // Dropping that filter let them back, so name them properly.
+  "fanny", "fannies", "randy", "dong", "dongs", "johnson", "johnsons",
+  "sissy", "sissies", "cissy", "pooh"]) bad.add(w);
 
 const fragments = new Set(["aren", "cant", "dont", "isnt", "wont", "weve", "wasnt", "didnt",
   "hadnt", "arent", "youve", "youll", "youre", "theyd", "theyll", "theyre", "thats", "whats",
@@ -76,7 +82,7 @@ for (const [w, r] of rank) {           // Map keeps insertion order: common firs
   if (w.length < MIN || w.length > MAX || r > MAX_RANK) continue;
   if (!/^[a-z]+$/.test(w)) continue;
   if (!valid.has(w)) continue;
-  if (bad.has(w) || names.has(w) || fragments.has(w)) continue;
+  if (bad.has(w) || fragments.has(w)) continue;
   words.push(w);
 }
 words.sort();

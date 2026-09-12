@@ -84,9 +84,17 @@ npm run generate    # needs network; caches its downloads in .cache/
 | [TWL Scrabble dictionary](https://github.com/redbo/scrabble) | What counts as a word. Scrabble lists carry no proper nouns |
 | [OpenSubtitles frequency list](https://github.com/hermitdave/FrequencyWords) | Which of those a player is likely to know |
 | [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) | Profanity, filtered out |
-| [First-name databases](https://github.com/smashew/NameDatabases) | Names, filtered out |
 
-That leaves about 15,700 words of two to eight letters. The two-letter set keeps
+That leaves about 16,400 words of two to eight letters.
+
+There is deliberately **no first-names filter**. An early version had one and it
+threw away 813 ordinary words, `WILL` `BILL` `ROSE` `GRACE` `HOPE` `ART` `DAWN`
+`MAY` `JACK` `CHASE` among them, because thousands of English words are also
+somebody's name. A player reported `WILL` being refused and they were right.
+The filter was redundant as well as harmful: a Scrabble dictionary contains no
+proper nouns, so `HELEN`, `SANTA` and `MOORE` are already absent while `WILL`
+and `ROSE` are correctly present. The dictionary is the authority, and the test
+now pins both directions. The two-letter set keeps
 the Scrabble oddities that survive the frequency filter, QI and XU among them:
 the validity standard is the same dictionary at every length, and rewarding that
 knowledge is part of the skill.
