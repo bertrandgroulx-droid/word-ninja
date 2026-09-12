@@ -164,27 +164,36 @@ three-letter words score differently" is the question players actually ask, and
 one dense sentence in a list of ten was not answering it.
 
 The results card then shows the same arithmetic for every word of the run, so
-the answer is there whether or not anyone opened the rules:
-
-each word shown as the tiles it was cut from, values and all, then the
-arithmetic:
+the answer is there whether or not anyone opened the rules. Each factor gets its
+own column, headed once at the top:
 
 ```
-JAZZ                                     124
-[J10][A1][Z10][Z10]   31 × 4
+WORD                        TILES  LEN  RUN  SCORE
 
-STRENGTH                                 120
-[S1][T2][R1][E1][N2][G3][T2][H3]   15 × 8
+JAZZ  [J10][A1][Z10][Z10]      31   ×4    –    124
+GORE  [G3][O2][R1][E1]          7   ×4   ×2     56
+BAY   [B3][A1][Y4]              8   ×3    –     24
 ```
 
-Letter values, times the number of letters, times the streak multiplier where
-one applied. A bare `31 × 4` still hides where the 31 came from; the tiles do
-not, and they look like the ones you actually cut.
+The first version wrote the arithmetic inline after the tiles, `7 × 4 × 2`, and
+a player reported it was still not landing: a three-letter word above a
+four-letter word with a bigger number beside it reads as a fault. Two things
+were wrong. The numbers followed tile groups of different widths, so nothing
+lined up between rows and there was no column to compare down. And most rows
+showed two factors while the caption named three, so the `× 2` that explained
+the upset looked like a typo on the one row that had it.
+
+Fixed columns solve the first. For the second, a word cut on a streak wears the
+same amber pill the multiplier wears on the score bar, and its whole row is
+tinted to match, so BAY out-scoring GORE reads as a bonus before you have read
+a single digit. Rows without a streak get a dash rather than a blank, so the
+column never looks like missing information.
 
 The test checks each entry shows its own letters, that the values on them are
-the real ones, that the first factor is those values added up, that the second
-is the word's length, and that the whole thing multiplies out to the stated
-total and sums to the score.
+the real ones, that the Tiles column is those values added up, that Len is the
+word's length, that Run is a dash or a multiplier and the row is tinted when
+and only when it is a multiplier, and that the three multiply out to the stated
+total and sum to the score.
 
 ## Testing
 

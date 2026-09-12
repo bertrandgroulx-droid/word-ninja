@@ -311,15 +311,23 @@ async function run() {
   assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
     `results count the ${cutSoFar} words cut`);
   assert((await page.$$eval("#cutList .cut", (e) => e.length)) === cutSoFar, "the words are listed");
-  // Every entry shows the tiles it was cut from, and the working has to agree
-  // with both the tiles and the total.
+  // Every entry shows the tiles it was cut from, and each factor sits in its
+  // own labelled column, so the check is that the columns agree with the tiles
+  // and with the total.
+  assert(!(await page.$eval("#cutHead", (e) => e.classList.contains("hidden"))),
+    "the column headings show above the words");
+  const heads = await page.$$eval("#cutHead .n", (els) => els.map((e) => e.textContent.trim()));
+  assert(heads.join("|") === "Tiles|Len|Run|Score", `columns are headed, got ${heads.join("|")}`);
   const rows = await page.$$eval("#cutList .cut", (els) => els.map((el) => ({
     word: el.querySelector(".w").textContent,
     tiles: [...el.querySelectorAll(".mt")].map((t) => ({
       ch: t.childNodes[0].textContent,
       val: Number(t.querySelector("i").textContent)
     })),
-    work: el.querySelector(".cut-math").textContent,
+    sum: Number(el.querySelector(".sum").textContent),
+    len: el.querySelector(".len").textContent.trim(),
+    run: el.querySelector(".run").textContent.trim(),
+    boosted: el.classList.contains("boost"),
     total: Number(el.querySelector(".tot").textContent)
   })));
   const POINTS = await page.evaluate(() => window.WORD_NINJA_DATA.POINTS);
@@ -328,12 +336,19 @@ async function run() {
       `${r.word} shows its own letters, got ${r.tiles.map((t) => t.ch).join("")}`);
     assert(r.tiles.every((t) => t.val === POINTS[t.ch]),
       `${r.word} shows the real letter values`);
-    const parts = r.work.split("×").map((n) => Number(n.trim()));
-    assert(parts[0] === r.tiles.reduce((a, t) => a + t.val, 0),
-      `${r.word}: the first factor is the tiles added up, got ${parts[0]}`);
-    assert(parts[1] === r.word.length, `${r.word} multiplies by its own length, got ${parts[1]}`);
-    assert(parts.reduce((a, b) => a * b, 1) === r.total, `${r.word}: ${r.work} should equal ${r.total}`);
+    assert(r.sum === r.tiles.reduce((a, t) => a + t.val, 0),
+      `${r.word}: the Tiles column is the tiles added up, got ${r.sum}`);
+    assert(r.len === `\u00d7${r.word.length}`, `${r.word}: Len is its own length, got ${r.len}`);
+    // A dash where there was no streak, an amber-pilled multiplier where there
+    // was one, and the row tinted to match so the bonus is visible without
+    // reading the numbers.
+    const mult = r.run === "\u2013" ? 1 : Number(r.run.replace("\u00d7", ""));
+    assert(mult >= 1, `${r.word}: Run reads as a dash or a multiplier, got "${r.run}"`);
+    assert(r.boosted === (mult > 1), `${r.word}: the row is tinted when and only when it ran a streak`);
+    assert(r.sum * r.word.length * mult === r.total,
+      `${r.word}: ${r.sum} \u00d7 ${r.word.length} \u00d7 ${mult} should equal ${r.total}`);
   }
+  assert(rows.some((r) => r.boosted), "at least one word this run was cut on a streak");
   assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#stScore", (e) => e.textContent)),
     "and the rows add up to the score");
 
