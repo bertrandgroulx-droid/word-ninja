@@ -1,0 +1,16 @@
+{
+  "name": "Word Ninja",
+  "short_name": "Word Ninja",
+  "description": "An arcade word game: letters fly, you slice through them to build words against the clock.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0f14",
+  "theme_color": "#0d0f14",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
