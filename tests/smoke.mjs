@@ -115,6 +115,57 @@ async function run() {
   assert(demo.tiles === 3, `three tiles are cut in the example, got ${demo.tiles}`);
   assert(/CAT/.test(await page.$eval("#helpBack .demo figcaption", (e) => e.textContent)),
     "and the caption does the arithmetic");
+
+  // The example is played, not posed, and an animation has more ways to fail
+  // silently than a drawing. Drive the loop by hand rather than watching it.
+  const seek = (ms) => page.evaluate((t) => {
+    for (const a of document.getAnimations()) { a.pause(); a.currentTime = t; }
+  }, ms);
+  const frame = () => page.$eval("#helpBack .demo svg", (svg) => {
+    const box = svg.getBoundingClientRect();
+    const seen = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > box.top + 2 && r.top < box.bottom - 2;
+    };
+    const lit = (el) => Number(getComputedStyle(el).opacity) > 0.9;
+    return {
+      // how much of the blade is drawn, 0 to 1
+      blade: 1 - parseFloat(getComputedStyle(svg.querySelector(".blade")).strokeDashoffset) / 300,
+      bladeLit: lit(svg.querySelector(".blade")),
+      badges: [...svg.querySelectorAll(".ord")].map(lit),
+      chips: [...svg.querySelectorAll(".chip")].map(lit),
+      score: lit(svg.querySelector(".plus")),
+      // tiles with any part of them inside the frame
+      onScreen: [...svg.querySelectorAll("rect[rx='9'], rect[rx='10']")].filter(seen).length
+    };
+  });
+  assert((await page.evaluate(() => document.getAnimations().length)) > 0,
+    "the example is animating");
+
+  await seek(3000);
+  const preCut = await frame();
+  assert(preCut.blade < 0.02, `no blade before the cut, got ${preCut.blade.toFixed(2)} of it`);
+  assert(!preCut.badges.some(Boolean) && !preCut.chips.some(Boolean),
+    "and no order badges or word yet");
+
+  await seek(4600);
+  const cutting = await frame();
+  assert(cutting.blade > 0.99, `the blade is drawn through by the cut, got ${cutting.blade.toFixed(2)}`);
+  assert(cutting.bladeLit, "and still lit");
+  assert(cutting.badges.length === 3 && cutting.badges.every(Boolean),
+    `all three tiles are numbered in order, got ${cutting.badges}`);
+  assert(cutting.chips.length === 3 && cutting.chips.every(Boolean), "the word is spelled out");
+  assert(cutting.score, "and the score for it lands");
+
+  // Between cuts the frame still has letters falling through it. An earlier
+  // version left it empty for a second at the loop's seam, which reads as a
+  // diagram that failed to load.
+  for (let t = 0; t < 8000; t += 250) {
+    await seek(t);
+    const f = await frame();
+    assert(f.onScreen > 0, `letters are falling at t=${t / 1000}s, frame was empty`);
+  }
+  await page.evaluate(() => { for (const a of document.getAnimations()) a.play(); });
   // The rules quote specific numbers. Those are easy to leave behind when the
   // tuning moves, so check the ones this suite also verifies behaviourally.
   const rules = await page.$eval("#helpBack .card", (e) => e.textContent.replace(/\s+/g, " "));
