@@ -310,14 +310,19 @@ window.createWordNinja = function (ctx) {
     if (!DICT.has(word)) {
       // A stray tap or a clipped letter or two isn't a wrong answer, it's an
       // accident, so it costs nothing. Past that length it was a real attempt.
+      // Name what was actually cut. The blade takes tiles in the order it
+      // meets them, so an intended BUT can arrive as BTU, or pick up a fourth
+      // tile on the way past. Saying only "wrong" leaves the player certain a
+      // real word was refused.
       if (word.length < CONFIG.freeBelow) {
         flashWord("bad");
-        toast("Not a word");
+        toast(word.toUpperCase() + " is not a word");
         return { word: word, ok: false, scored: 0, reason: "short" };
       }
       extra -= CONFIG.penaltySec;
       streak = 0;
       flashWord("bad");
+      toast(word.toUpperCase() + " is not a word");
       pop(W / 2, H * 0.62, "−" + CONFIG.penaltySec + "s", "bad");
       renderHud();
       return { word: word, ok: false, scored: 0, reason: "unknown" };
@@ -578,7 +583,10 @@ window.createWordNinja = function (ctx) {
     var letters = els.word.querySelectorAll(".ch");
     if (!letters.length) { renderWord(); return; }
     els.word.className = "word " + kind;
-    setTimeout(function () { if (!buffer.length) renderWord(); }, 260);
+    // A rejected word lingers: reading back what the blade actually took is
+    // the only way to learn that the order or an extra tile was the problem.
+    setTimeout(function () { if (!buffer.length) renderWord(); },
+      kind === "bad" ? 900 : 260);
   }
 
   function pop(x, y, text, kind) {
