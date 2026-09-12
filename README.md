@@ -3,23 +3,27 @@
 **Letters fly. Drag through them to build words before the clock runs out.**
 
 Word Ninja is a static, dependency-free arcade word game built for a phone in
-portrait. Tiles arc up from the bottom of the screen. You drag a finger through
-them to cut them into your word, in the order you touch them, and lift to
-submit. No accounts, no network calls, no build step.
+portrait. Tiles fall from the top of the screen and leave at the bottom. You drag
+a finger through them to cut them into your word, in the order you touch them,
+and lift to submit. No accounts, no network calls, no build step.
 
 ```
-        S                 drag ────────────╮
-   B         P                             │
-        E                          cut: B E S T
-   T              💣               lift to submit
+   B      S            falling ↓
+        P      💣
+   E                   drag ─────────────╮
+        T                                │
+                       cut: B E S T, lift to submit
 ```
 
 ## The round
 
 Sixty seconds. Everything else follows from that.
 
-- **Longer words pay far more.** A word scores its letter values times its
-  length, so a six-letter cut is worth several three-letter ones.
+- **A word scores the sum of its letter values, times its length.** So length
+  pays twice over, and rare letters pay too: CAT is 18 and BOX is 45, both three
+  letters. Each tile carries its value in the corner. Values run from 1 for
+  `a e i r s` up to 10 for `j q x z`, derived from how often each letter appears
+  in this dictionary rather than copied from Scrabble.
 - **Long words buy time.** Five letters adds two seconds, seven adds four. A
   good run sustains itself, up to a ceiling of ninety seconds on the clock.
 - **Three valid words in a row doubles your score**, and a longer streak pushes
@@ -28,11 +32,15 @@ Sixty seconds. Everything else follows from that.
   Too short, or a word you already cut, simply scores nothing.
 - **Bombs cost ten seconds** and void the word in your hand. Late in a run,
   that ends it.
-- **Missing a letter costs nothing.** Tiles you ignore fall away. Hesitation
-  costs opportunity, not points.
+- **Two letters is the floor.** A single tile never scores, whatever it says, so
+  every word costs you at least two cuts and a route between them.
+- **Missing a letter costs nothing.** Tiles you ignore fall past. Hesitation
+  costs opportunity, not points. Nor does one clipped tile: a single letter is
+  never a word, so it is treated as a slip rather than a guess. Two letters is a
+  real attempt, and a wrong one costs three seconds like any other.
 
-**Slow or Fast** sets how long a tile hangs in the air, about ten seconds against
-seven. Same letters, same scoring, more or less time to think. The first build
+**Slow or Fast** sets how long a tile takes to cross the screen, about ten
+seconds against seven. Slow is the default, chosen by play testing. Same letters, same scoring, more or less time to think. The first build
 ran at two seconds and the first person to play it called it unplayable; both
 settings have come down twice since on play-test feedback, and what is called
 Fast here is still very floaty by arcade standards. Deliberately so: reading a
@@ -68,7 +76,10 @@ npm run generate    # needs network; caches its downloads in .cache/
 | [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) | Profanity, filtered out |
 | [First-name databases](https://github.com/smashew/NameDatabases) | Names, filtered out |
 
-That leaves about 15,000 words of three to eight letters.
+That leaves about 15,700 words of two to eight letters. The two-letter set keeps
+the Scrabble oddities that survive the frequency filter, QI and XU among them:
+the validity standard is the same dictionary at every length, and rewarding that
+knowledge is part of the skill.
 
 The **letter bag is measured from those words**, not from English prose. Prose
 frequency over-weights the letters of common short function words, and a bag
@@ -101,18 +112,26 @@ waves fixed both.
 
 What the simulation could not tell me was pace. It counts what is *available*,
 not whether a person can read it in time, and the first build was tuned for
-reflex: tiles were airborne about two seconds. That is fine for cutting fruit
-and hopeless for a game where you must read a dozen letters, find a word among
-them, and plan a path through it in order. The fix was gravity, and the two
-speeds are two gravities. Each pairs with its own wave gap, because slower tiles
-linger and a fixed gap would flood the screen:
+reflex: tiles crossed the screen in about two seconds. That is fine for cutting
+fruit and hopeless for a game where you must read a dozen letters, find a word
+among them, and plan a path through it in order.
 
-| Speed | Gravity | Airborne | Wave gap | Tiles on screen |
-|---|---|---|---|---|
-| Slow | 0.06 | ~9.7s | 4.6s → 3.4s | ~12 |
-| Fast | 0.12 | ~6.8s | 3.4s → 2.4s | ~12 |
+Two rounds of play-test feedback later, the motion itself changed. Tiles used to
+arc up from the bottom under gravity. They now **fall from the top at a constant
+speed**, because an arc spends its slowest, most readable moment at the apex and
+its fastest at the edges, while a steady fall gives the same reading time
+everywhere on screen and lets you plan a path ahead of where the tiles are now.
+Predictability is worth more than drama here.
 
-Only the pace changes; the crowd stays the same size.
+| Speed | Crossing time | Wave gap | Tiles on screen |
+|---|---|---|---|
+| Slow | ~9.7s | 4.6s → 3.4s | ~13 |
+| Fast | ~6.8s | 3.4s → 2.4s | ~12 |
+
+Only the pace changes; the crowd stays the same size. Each wave's tiles enter
+spread across most of the gap to the next wave, rather than together: released
+at once they descend as a horizontal band with dead space between bands, and
+spread out they read as a steady drizzle.
 
 ## Testing
 

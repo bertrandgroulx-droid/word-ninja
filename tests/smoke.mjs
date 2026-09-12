@@ -64,14 +64,18 @@ async function run() {
       sorted: words.every((w, i) => i === 0 || words[i - 1] <= w),
       unique: set.size === words.length,
       hasCommon: ["cat", "stone", "ninja", "letter"].filter((w) => set.has(w)),
+      singles: words.filter((w) => w.length === 1),
+      twoLetter: words.filter((w) => w.length === 2).length,
       vowelShare: vowelWeight / total,
       letters: Object.keys(d.BAG).length
     };
   });
   assert(data.count > 8000, `dictionary should be substantial, got ${data.count}`);
   assert(data.shaped && data.unique && data.sorted, "dictionary is clean, unique and sorted");
-  assert(data.lengths[0] === 3 && data.lengths[data.lengths.length - 1] === 8,
-    `words run 3 to 8 letters, got ${data.lengths.join(",")}`);
+  assert(data.lengths[0] === 2 && data.lengths[data.lengths.length - 1] === 8,
+    `words run 2 to 8 letters, got ${data.lengths.join(",")}`);
+  assert(data.singles.length === 0, `no single letter counts, got ${data.singles.join(" ")}`);
+  assert(data.twoLetter > 40, `the two-letter words are there, got ${data.twoLetter}`);
   assert(data.hasCommon.includes("cat") && data.hasCommon.includes("stone"),
     `everyday words are present, found ${data.hasCommon.join(",")}`);
   assert(data.letters === 26, "every letter is in the bag");
@@ -110,10 +114,10 @@ async function run() {
       lastWave: a[a.length - 1].t,
       bombs: bombs.length,
       earliestBomb: Math.min(...a.filter((w) => w.tiles.some((t) => t.bomb)).map((w) => w.t)),
-      // Launch across the width, and high enough to be reachable without
-      // sailing off the top. The exact band is a tuning knob; these are the
-      // limits beyond which the tile is unplayable.
-      inBounds: tiles.every((t) => t.x > 0.05 && t.x < 0.95 && t.rise > 0.3 && t.rise < 0.95),
+      // Enter across the width, at a crossing speed near the nominal one. The
+      // exact band is a tuning knob; these are the limits beyond which a tile
+      // is off screen or streaking past unreadably.
+      inBounds: tiles.every((t) => t.x > 0.05 && t.x < 0.95 && t.fall > 0.5 && t.fall < 2),
       lettersOnly: tiles.every((t) => t.bomb || /^[a-z]$/.test(t.ch)),
       vowelWaves: a.filter((w) => {
         const letters = w.tiles.filter((t) => !t.bomb);
@@ -131,15 +135,16 @@ async function run() {
   assert(sched.vowelWaves === 0, `every wave of 2+ has a vowel, ${sched.vowelWaves} without`);
   assert(sched.bombs > 0 && sched.earliestBomb >= 8, `bombs arrive, but not early: ${sched.earliestBomb}`);
 
-  // 5) Tiles hang long enough to read and plan around. This is a word game:
-  //    at two seconds it was unplayable, whatever the other numbers said.
+  // 5) Tiles cross the screen slowly enough to read and plan around. This is a
+  //    word game: the first build crossed in two seconds and was unplayable,
+  //    whatever the other numbers said.
   const hang = async () => page.evaluate(() => {
     const st = window.game._debug.state();
     const s = window.game._debug.schedule("airtime");
     const tiles = s.flatMap((w) => w.tiles);
-    // Matches the launch maths in release(): a tile is airborne
-    // 2 * sqrt(2 * rise / gravity) seconds, both in arena-height units.
-    const secs = tiles.map((t) => 2 * Math.sqrt(2 * t.rise / st.gravity));
+    // Matches release(): a tile crosses the screen in fallSec x its own
+    // multiplier, at constant speed.
+    const secs = tiles.map((t) => st.fallSec * t.fall);
     const gaps = s.slice(1).map((w, i) => w.t - s[i].t);
     // Roughly how many tiles are up at once: each wave's tiles times how many
     // wave-gaps they stay airborne.
@@ -150,35 +155,43 @@ async function run() {
       onScreen: (tiles.length / s.length) * (avgAir / avgGap)
     };
   });
+  const opening = await hang();
+  assert(opening.speed === "slow", `opens on slow, got ${opening.speed}`);
+  const slow = opening;
+  await page.evaluate(() => window.game._debug.setSpeed("fast"));
   const fast = await hang();
-  assert(fast.speed === "fast", "opens on the fast speed");
-  assert(fast.min > 3.5, `tiles hang long enough to read, min ${fast.min.toFixed(1)}s`);
-  assert(fast.avg > 6 && fast.avg < 8, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
+  assert(fast.min > 4, `tiles stay on screen long enough to read, min ${fast.min.toFixed(1)}s`);
+  assert(fast.avg > 6 && fast.avg < 8, `fast crossing time, avg ${fast.avg.toFixed(1)}s`);
 
   // Slow is a real difference, and thins its waves so the screen doesn't flood.
-  await page.evaluate(() => window.game._debug.setSpeed("slow"));
-  const slow = await hang();
   assert(slow.avg > fast.avg * 1.3, `slow is markedly slower: ${slow.avg.toFixed(1)}s vs ${fast.avg.toFixed(1)}s`);
   assert(Math.abs(slow.onScreen - fast.onScreen) < 3,
     `both speeds hold a similar crowd, ${slow.onScreen.toFixed(1)} vs ${fast.onScreen.toFixed(1)}`);
-  assert(await page.$eval("#speedSlow", (e) => e.classList.contains("active")), "the card shows the choice");
-  await page.evaluate(() => window.game._debug.setSpeed("fast"));
+  assert(await page.$eval("#speedFast", (e) => e.classList.contains("active")), "the card shows the choice");
 
   // 6) Scoring: a valid word pays, longer words pay much more.
   await page.click("#startBtn");
   assert((await state(page)).phase === "playing", "round started");
   const cat = await play(page, "cat");
   assert(cat.ok && cat.scored > 0, `"cat" scores, got ${JSON.stringify(cat)}`);
+  // Two words of the same length score differently, by letter value. That is
+  // the rule the help card now spells out, so pin it down.
+  const rare = await play(page, "box");
+  assert(rare.scored > cat.scored,
+    `rarer letters pay more: BOX ${rare.scored} vs CAT ${cat.scored}`);
+
   const longer = await play(page, "stone");
   assert(longer.ok && longer.scored > cat.scored, "a longer word pays more");
   assert(longer.bonus > 0, "five letters buys time back");
 
-  // 7) Three in a row lifts the multiplier.
+  // 7) Three valid words in a row lifts the multiplier. CAT, BOX and STONE
+  //    were all cut at x1, so the fourth word is the first to be doubled.
   let s = await state(page);
-  assert(s.streak === 2 && s.mult === 1, `streak building, got ${JSON.stringify(s)}`);
-  await play(page, "table");
-  s = await state(page);
-  assert(s.mult === 2, `three in a row gives x2, got ${s.mult}`);
+  assert(s.streak === 3 && s.mult === 2,
+    `three in a row gives x2, got streak ${s.streak} mult ${s.mult}`);
+  const doubled = await play(page, "table");
+  assert(doubled.ok, "the fourth word lands");
+  assert((await state(page)).mult === 2, "and the multiplier holds");
 
   // 8) A word that isn't a word costs time and the multiplier.
   const before = (await state(page)).remaining;
@@ -188,12 +201,27 @@ async function run() {
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
 
-  // 9) Too short costs nothing; a repeat scores nothing.
-  const shortWord = await play(page, "an");
-  assert(!shortWord.ok && shortWord.reason === "short", "two letters is not a submission");
+  // 9) Two letters is the floor: a real two-letter word scores, a single tile
+  //    never does, and a wrong two-letter guess costs like any other.
+  const pair = await play(page, "ox");
+  assert(pair.ok && pair.scored > 0, `"ox" is a word, got ${JSON.stringify(pair)}`);
+  const beforeSlip = await state(page);
+  const slip = await play(page, "a");
+  assert(!slip.ok && slip.reason === "short", "a single tile is never a submission");
+  const alsoSlip = await play(page, "z");
+  assert(!alsoSlip.ok && alsoSlip.reason === "short", "whatever letter it is");
+  assert((await state(page)).remaining > beforeSlip.remaining - 0.5,
+    "and it costs no time, since one clipped tile is an accident not a guess");
+  const wrongPair = await play(page, "eb");
+  assert(!wrongPair.ok && wrongPair.reason === "unknown", "a two-letter non-word is a real guess");
+  assert((await state(page)).remaining < beforeSlip.remaining - 2.5, "so it costs three seconds");
   const repeat = await play(page, "cat");
   assert(!repeat.ok && repeat.reason === "repeat", "the same word twice pays once");
-  assert((await state(page)).score === after.score, "no score from short or repeated words");
+  const repeatPair = await play(page, "ox");
+  assert(!repeatPair.ok && repeatPair.reason === "repeat",
+    "which caps the cheap two-letter words at one cut each per round");
+  assert((await state(page)).score === beforeSlip.score,
+    "and nothing since OX has scored: slips, wrong guesses and repeats all pay nothing");
 
   // 10) A real drag across a real tile actually cuts it.
   const box = await page.$eval("#cv", (e) => {
@@ -224,6 +252,7 @@ async function run() {
     await page.mouse.up();
   };
   const preBomb = await state(page);
+  const cutSoFar = preBomb.words.length;
   await cutBomb();
   const postBomb = await state(page);
   assert(postBomb.remaining < preBomb.remaining - 9, "a bomb costs ten seconds");
@@ -236,8 +265,11 @@ async function run() {
   assert((await state(page)).phase === "over", "a bomb late in a run ends it");
   await page.waitForSelector("#overBack:not(.hidden)", { timeout: 3000 });
   assert((await page.$eval("#overTitle", (e) => e.textContent)) === "Bomb", "and says so");
-  assert((await page.$eval("#stWords", (e) => e.textContent)) === "3", "three words survived the run");
-  assert((await page.$$eval("#cutList span", (e) => e.length)) === 3, "the words are listed");
+  // However many words this run happened to cut, the results card reports that
+  // number and lists them, rather than a figure hardcoded here.
+  assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
+    `results count the ${cutSoFar} words cut`);
+  assert((await page.$$eval("#cutList span", (e) => e.length)) === cutSoFar, "the words are listed");
 
   // 12) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {

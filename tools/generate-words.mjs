@@ -11,7 +11,7 @@ import path from "node:path";
 const ROOT = path.resolve(new URL("../", import.meta.url).pathname);
 const CACHE = path.join(ROOT, ".cache");
 
-const MIN = 3;
+const MIN = 2;
 const MAX = 8;
 const MAX_RANK = 30000;   // how far down the frequency list a word may sit
 
@@ -112,11 +112,14 @@ const out = path.join(ROOT, "words.js");
 fs.writeFileSync(out, `// GENERATED FILE — do not edit by hand.
 // Rebuild with: npm run generate   (see tools/generate-words.mjs)
 //
-// WORDS  every accepted word, ${MIN} to ${MAX} letters, common enough to be fair.
+// WORDS  every accepted word: ${MIN} to ${MAX} letters and common enough to be
+//        fair. Two letters is the floor, so no single letter counts, and the
+//        obscurer two-letter Scrabble words are filtered out by frequency the
+//        same way every other length is.
 // BAG    per-mille weight of each letter, measured across WORDS itself.
 // POINTS what each letter is worth, running inversely to how common it is.
 window.WORD_NINJA_DATA = {
-  MIN: ${MIN},
+  MIN: ${Math.min(...words.map((w) => w.length))},
   MAX: ${MAX},
   WORDS: "${words.join(" ")}".split(" "),
   BAG: ${JSON.stringify(weights)},

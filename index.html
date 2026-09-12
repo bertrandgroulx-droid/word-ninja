@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
 <title>Word Ninja</title>
-<meta name="description" content="Word Ninja — a phone-first arcade word game. Letters fly, you slice through them to build words against the clock." />
+<meta name="description" content="Word Ninja — a phone-first arcade word game. Letters fall past you, and you slice through them to build words against the clock." />
 <meta name="color-scheme" content="dark" />
 
 <!-- Bookmark/tab icon. Several apps share this github.io address and browsers
@@ -266,19 +266,25 @@
       <div class="card">
         <h2>How to play</h2>
         <ul>
-          <li>Letters fly up. <b>Drag through them</b> to cut them into your word.</li>
-          <li><b>Lift your finger</b> to submit. Three letters or more.</li>
+          <li>Letters fall from the top. <b>Drag through them</b> to cut them into your word.</li>
+          <li><b>Lift your finger</b> to submit. Two letters or more, so a single
+            tile never scores.</li>
           <li>Letters are cut in the order you touch them, so plan the path.</li>
           <li>Long words pay far more, and five letters or longer <b>buy you time</b>.</li>
-          <li>A wrong word costs three seconds and drops your multiplier.</li>
+          <li><b>Rare letters pay more too.</b> The small number on a tile is what
+            that letter is worth, and a word scores the sum of its letters times
+            how many there are. So CAT is 18 and BOX is 45, both three letters.
+            Short and rare beats short and common: OX pays 24, IS pays 4.</li>
+          <li>A wrong word costs three seconds and drops your multiplier. One
+            stray letter costs nothing, so a slip is only a slip.</li>
           <li>Cut three words in a row for ×2, and keep going for more.</li>
           <li>💣 <b>Bombs cost ten seconds</b> and void the word you were cutting.
             Late in a run that is the end of it.</li>
-          <li><b>Slow or Fast</b> sets how long tiles hang in the air, about seven
-            seconds against four and a half. Same letters, same scoring, more or
+          <li><b>Slow or Fast</b> sets how long a tile takes to cross the screen,
+            about ten seconds against seven. Same letters, same scoring, more or
             less time to think. Each keeps its own daily run and its own best.</li>
         </ul>
-        <p>Missing a letter costs nothing. Let the bad ones fall.</p>
+        <p>Missing a letter costs nothing. Let the bad ones fall past.</p>
         <p>The clock tops out at a minute and a half, however well you cut.</p>
         <button type="button" class="primary" id="helpClose">Got it</button>
       </div>
