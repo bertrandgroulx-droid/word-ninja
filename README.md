@@ -153,11 +153,35 @@ spread out they read as a steady drizzle.
 
 ## The rules card
 
-The in-game rules open with a drawn example rather than a wall of bullets: three
-tiles cut in numbered order by a blade path, a bomb it steers around, and a
-high-value Z it ignores because a single letter is not a word. The caption does
-the arithmetic. It is inline SVG, so it scales with the card and stays in the
-palette without shipping an image.
+The in-game rules open with a worked example rather than a wall of bullets, and
+it plays rather than poses. Letters fall through a small frame, a blade draws
+itself through three of them in numbered order, the word builds letter by letter
+below, and the score lands — steering around a bomb and ignoring a high-value Z
+on the way, because a single letter is not a word. The caption does the
+arithmetic. It is inline SVG driven by CSS, so it scales with the card, stays in
+the palette, and ships no image and no library.
+
+A still picture can show the end of a cut but not the thing players actually
+need to judge: how fast the letters come, and that you have time to plan a path
+through them. That is the question every play test raised, so the diagram now
+answers it by demonstration.
+
+One eight-second loop drives every part, which is what keeps them in step: the
+tiles fall the whole time, and the blade is drawn over the six tenths of a
+second they take to cross the line it was drawn for. Two more tiles run the same
+loop on a different phase, so the frame is never empty between cuts — the same
+reason the real waves are spread rather than released together.
+
+Every animation *ends* on the state the old static drawing held, so
+`prefers-reduced-motion` switches them all off and leaves that drawing intact
+rather than a blank box. The off-phase tiles hide themselves there too: standing
+still they only crowd the tiles being cut.
+
+The test drives the loop by hand rather than watching it: no blade before the
+cut, a blade drawn through with three numbered badges, the word and the score at
+the cut, and — sampled right around the loop — never a frame with no letters in
+it. That last one is a real bug it caught, a one-second empty seam that reads as
+a diagram which failed to load.
 
 Below the bullets, scoring gets its own section, because "why did those two
 three-letter words score differently" is the question players actually ask, and

@@ -174,7 +174,14 @@
   }
   .card > button.primary { background: var(--accent); color: #14060a; border-color: transparent; }
 
-  /* The worked cut at the top of the rules. */
+  /* The worked cut at the top of the rules, played rather than posed. Tiles
+     fall through the frame, a blade draws itself through three of them in
+     order, and the word builds at the bottom the way it does in the arena.
+     One 8s loop drives all of it, so the parts stay in step.
+
+     Every animation ENDS on the state the diagram used to hold statically, so
+     switching the animations off (below, for reduced motion) leaves the old
+     drawing intact rather than a blank box. */
   .demo { margin: 0 0 14px; }
   .demo svg { width: 100%; height: auto; max-width: 100%; display: block; }
   .demo .ch { fill: #14171f; font: 800 24px system-ui, sans-serif; text-anchor: middle; }
@@ -182,6 +189,73 @@
   .demo .bomb { font-size: 21px; text-anchor: middle; }
   .demo .ord circle { fill: var(--accent); }
   .demo .ord text { fill: #14060a; font: 800 11px system-ui, sans-serif; text-anchor: middle; }
+  /* Scale these about themselves rather than the SVG origin. */
+  .demo .ord, .demo .chip, .demo .plus { transform-box: fill-box; transform-origin: center; }
+  .demo .chip rect { fill: rgba(86, 224, 255, 0.14); stroke: rgba(86, 224, 255, 0.42); }
+  .demo .chip text { fill: var(--text); font: 800 14px system-ui, sans-serif; text-anchor: middle; }
+  .demo .plus { fill: var(--good); font: 800 15px system-ui, sans-serif; text-anchor: middle; }
+  /* Fully drawn at rest; the animation is what hides it and redraws it. */
+  .demo .blade { stroke-dasharray: 300; }
+
+  .demo .fall { animation: demo-fall 8s linear infinite; }
+  /* Negative delays start these mid-fall rather than waiting a whole loop. */
+  .demo .p1 { animation-delay: -2.7s; }
+  .demo .p2 { animation-delay: -5.4s; }
+  .demo .blade { animation: demo-blade 8s linear infinite; }
+  .demo .s1 { animation: demo-s1 8s linear infinite; }
+  .demo .s2 { animation: demo-s2 8s linear infinite; }
+  .demo .s3 { animation: demo-s3 8s linear infinite; }
+  .demo .plus { animation: demo-score 8s linear infinite; }
+
+  /* Far enough either way that a tile is outside the frame at both ends, so
+     the loop's restart is never visible. */
+  @keyframes demo-fall {
+    from { transform: translateY(-170px); }
+    to { transform: translateY(170px); }
+  }
+  /* The cut happens at the halfway mark, when the tiles are where the blade
+     was drawn for them, and the trail fades straight after it like the real
+     one. Holding it longer stranded a blade in mid-air over tiles that had
+     already fallen past it. */
+  @keyframes demo-blade {
+    0%, 45.7% { stroke-dashoffset: 300; opacity: 1; }
+    54.3%, 58% { stroke-dashoffset: 0; opacity: 1; }
+    63%, 100% { stroke-dashoffset: 0; opacity: 0; }
+  }
+  /* One pair per tile: its order badge and its letter in the word, appearing
+     together the moment the blade reaches it, and clearing before the next
+     tiles fall through the row the word sits in. */
+  @keyframes demo-s1 {
+    0%, 47.3% { opacity: 0; transform: scale(0.3); }
+    49.9%, 62% { opacity: 1; transform: scale(1); }
+    67.5%, 100% { opacity: 0; transform: scale(1); }
+  }
+  @keyframes demo-s2 {
+    0%, 49.9% { opacity: 0; transform: scale(0.3); }
+    52.4%, 62% { opacity: 1; transform: scale(1); }
+    67.5%, 100% { opacity: 0; transform: scale(1); }
+  }
+  @keyframes demo-s3 {
+    0%, 52.7% { opacity: 0; transform: scale(0.3); }
+    55.3%, 62% { opacity: 1; transform: scale(1); }
+    67.5%, 100% { opacity: 0; transform: scale(1); }
+  }
+  @keyframes demo-score {
+    0%, 53% { opacity: 0; transform: scale(0.5); }
+    56%, 62% { opacity: 1; transform: scale(1); }
+    67.5%, 100% { opacity: 0; transform: scale(1); }
+  }
+  /* Stopping the animations leaves every element on its finished state, which
+     is the diagram this replaced. */
+  @media (prefers-reduced-motion: reduce) {
+    .demo .fall, .demo .blade, .demo .s1, .demo .s2, .demo .s3, .demo .plus {
+      animation: none;
+    }
+    /* The drizzle only exists to fill the frames where the scene is off-screen.
+       Standing still it just crowds the tiles being cut. */
+    .demo .p1, .demo .p2 { display: none; }
+  }
+
   .demo figcaption {
     margin-top: 8px; font-size: 0.8rem; line-height: 1.45; color: var(--muted); text-align: left;
   }
@@ -364,56 +438,107 @@
              so it scales and stays in the palette. -->
         <figure class="demo">
           <svg viewBox="0 0 300 176" role="img" aria-labelledby="demoTitle">
-            <title id="demoTitle">A blade path cutting the tiles C, A and T in
-              order, passing under a bomb and ignoring a Z tile.</title>
+            <title id="demoTitle">Letters falling through a frame. A blade path
+              cuts the tiles C, A and T in that order, passing under a bomb and
+              ignoring a Z tile, and the word CAT builds below for 18
+              points.</title>
+            <defs>
+              <clipPath id="demoClip">
+                <rect x="2" y="2" width="296" height="172" rx="11" />
+              </clipPath>
+            </defs>
             <rect x="1" y="1" width="298" height="174" rx="12"
               fill="#0d0f14" stroke="rgba(255,255,255,0.10)" />
 
-            <!-- tiles you leave alone -->
-            <g transform="translate(58 34) rotate(-11)">
-              <rect x="-21" y="-21" width="42" height="42" rx="9" fill="#e9eef7" opacity="0.45" />
-              <text x="0" y="7" class="ch">Z</text>
-              <text x="12" y="16" class="pt">10</text>
-            </g>
-            <g transform="translate(212 30)">
-              <circle r="20" fill="#1a1016" stroke="#ff4d5e" stroke-width="2" />
-              <text x="0" y="7" class="bomb">💣</text>
-            </g>
+            <g clip-path="url(#demoClip)">
+              <!-- Two tiles on their own phase of the same loop, so the frame
+                   is never empty while the scene below is off-screen. They are
+                   the drizzle the real arena has between waves. -->
+              <g class="fall p1">
+                <g transform="translate(112 58) rotate(8)">
+                  <rect x="-21" y="-21" width="42" height="42" rx="9" fill="#e9eef7" opacity="0.45" />
+                  <text x="0" y="7" class="ch">E</text>
+                  <text x="12" y="16" class="pt">1</text>
+                </g>
+              </g>
+              <g class="fall p2">
+                <g transform="translate(196 74) rotate(-7)">
+                  <rect x="-21" y="-21" width="42" height="42" rx="9" fill="#e9eef7" opacity="0.45" />
+                  <text x="0" y="7" class="ch">M</text>
+                  <text x="12" y="16" class="pt">3</text>
+                </g>
+              </g>
 
-            <!-- the blade, laid down before the tiles it cuts -->
-            <path d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
-              fill="none" stroke="#56e0ff" stroke-opacity="0.28" stroke-width="11" stroke-linecap="round" />
-            <path d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
-              fill="none" stroke="#56e0ff" stroke-width="3" stroke-linecap="round" />
+              <!-- The scene the blade was drawn for. One group, so it keeps its
+                   arrangement all the way down. -->
+              <g class="fall">
+                <!-- what you leave alone -->
+                <g transform="translate(58 34) rotate(-11)">
+                  <rect x="-21" y="-21" width="42" height="42" rx="9" fill="#e9eef7" opacity="0.45" />
+                  <text x="0" y="7" class="ch">Z</text>
+                  <text x="12" y="16" class="pt">10</text>
+                </g>
+                <g transform="translate(212 30)">
+                  <circle r="20" fill="#1a1016" stroke="#ff4d5e" stroke-width="2" />
+                  <text x="0" y="7" class="bomb">💣</text>
+                </g>
 
-            <!-- tiles you cut, in this order -->
-            <g transform="translate(66 112) rotate(-6)">
-              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
-              <text x="0" y="8" class="ch">C</text>
-              <text x="13" y="18" class="pt">3</text>
-            </g>
-            <g transform="translate(150 84) rotate(5)">
-              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
-              <text x="0" y="8" class="ch">A</text>
-              <text x="13" y="18" class="pt">1</text>
-            </g>
-            <g transform="translate(236 116) rotate(-3)">
-              <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
-              <text x="0" y="8" class="ch">T</text>
-              <text x="13" y="18" class="pt">2</text>
-            </g>
+                <!-- what you cut -->
+                <g transform="translate(66 112) rotate(-6)">
+                  <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+                  <text x="0" y="8" class="ch">C</text>
+                  <text x="13" y="18" class="pt">3</text>
+                </g>
+                <g transform="translate(150 84) rotate(5)">
+                  <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+                  <text x="0" y="8" class="ch">A</text>
+                  <text x="13" y="18" class="pt">1</text>
+                </g>
+                <g transform="translate(236 116) rotate(-3)">
+                  <rect x="-23" y="-23" width="46" height="46" rx="10" fill="#e9eef7" />
+                  <text x="0" y="8" class="ch">T</text>
+                  <text x="13" y="18" class="pt">2</text>
+                </g>
+              </g>
 
-            <!-- the order the finger met them -->
-            <g class="ord">
-              <circle cx="42" cy="90" r="9" /><text x="42" y="94">1</text>
-              <circle cx="126" cy="62" r="9" /><text x="126" y="66">2</text>
-              <circle cx="212" cy="94" r="9" /><text x="212" y="98">3</text>
+              <!-- The blade stays where it is while the tiles fall through it,
+                   drawing itself over the six tenths of a second they take to
+                   cross it. -->
+              <path class="blade" d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
+                fill="none" stroke="#56e0ff" stroke-opacity="0.28" stroke-width="11"
+                stroke-linecap="round" stroke-linejoin="round" />
+              <path class="blade" d="M 14 132 L 66 112 L 150 84 L 236 116 L 288 138"
+                fill="none" stroke="#56e0ff" stroke-width="3"
+                stroke-linecap="round" stroke-linejoin="round" />
+
+              <!-- The order badges ride with their tiles but sit above the
+                   blade: its glow is 11px wide and swallowed the third one. -->
+              <g class="fall">
+                <g class="ord s1"><circle cx="42" cy="90" r="9" /><text x="42" y="94">1</text></g>
+                <g class="ord s2"><circle cx="126" cy="62" r="9" /><text x="126" y="66">2</text></g>
+                <g class="ord s3"><circle cx="212" cy="94" r="9" /><text x="212" y="98">3</text></g>
+              </g>
+
+              <!-- The word builds letter by letter, as it does in the arena. -->
+              <g class="chip s1">
+                <rect x="96" y="150" width="22" height="22" rx="5" />
+                <text x="107" y="166">C</text>
+              </g>
+              <g class="chip s2">
+                <rect x="122" y="150" width="22" height="22" rx="5" />
+                <text x="133" y="166">A</text>
+              </g>
+              <g class="chip s3">
+                <rect x="148" y="150" width="22" height="22" rx="5" />
+                <text x="159" y="166">T</text>
+              </g>
+              <text class="plus" x="192" y="167">+18</text>
             </g>
           </svg>
           <figcaption>
-            One drag, three tiles, in the order you touch them.
-            <b>CAT</b> scores 3 + 1 + 2 = 6, times 3 letters = <b>18</b>.
-            The Z was worth more, but Z alone is not a word.
+            Letters fall past you. One drag takes three of them, in the order you
+            touch them. <b>CAT</b> scores 3 + 1 + 2 = 6, times 3 letters =
+            <b>18</b>. The Z was worth more, but Z alone is not a word.
           </figcaption>
         </figure>
         <ul>
