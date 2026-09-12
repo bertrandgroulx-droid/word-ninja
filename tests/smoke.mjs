@@ -151,35 +151,43 @@ async function run() {
       onScreen: (tiles.length / s.length) * (avgAir / avgGap)
     };
   });
+  const opening = await hang();
+  assert(opening.speed === "slow", `opens on slow, got ${opening.speed}`);
+  const slow = opening;
+  await page.evaluate(() => window.game._debug.setSpeed("fast"));
   const fast = await hang();
-  assert(fast.speed === "fast", "opens on the fast speed");
   assert(fast.min > 4, `tiles stay on screen long enough to read, min ${fast.min.toFixed(1)}s`);
-  assert(fast.avg > 6 && fast.avg < 8, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
+  assert(fast.avg > 6 && fast.avg < 8, `fast crossing time, avg ${fast.avg.toFixed(1)}s`);
 
   // Slow is a real difference, and thins its waves so the screen doesn't flood.
-  await page.evaluate(() => window.game._debug.setSpeed("slow"));
-  const slow = await hang();
   assert(slow.avg > fast.avg * 1.3, `slow is markedly slower: ${slow.avg.toFixed(1)}s vs ${fast.avg.toFixed(1)}s`);
   assert(Math.abs(slow.onScreen - fast.onScreen) < 3,
     `both speeds hold a similar crowd, ${slow.onScreen.toFixed(1)} vs ${fast.onScreen.toFixed(1)}`);
-  assert(await page.$eval("#speedSlow", (e) => e.classList.contains("active")), "the card shows the choice");
-  await page.evaluate(() => window.game._debug.setSpeed("fast"));
+  assert(await page.$eval("#speedFast", (e) => e.classList.contains("active")), "the card shows the choice");
 
   // 6) Scoring: a valid word pays, longer words pay much more.
   await page.click("#startBtn");
   assert((await state(page)).phase === "playing", "round started");
   const cat = await play(page, "cat");
   assert(cat.ok && cat.scored > 0, `"cat" scores, got ${JSON.stringify(cat)}`);
+  // Two words of the same length score differently, by letter value. That is
+  // the rule the help card now spells out, so pin it down.
+  const rare = await play(page, "box");
+  assert(rare.scored > cat.scored,
+    `rarer letters pay more: BOX ${rare.scored} vs CAT ${cat.scored}`);
+
   const longer = await play(page, "stone");
   assert(longer.ok && longer.scored > cat.scored, "a longer word pays more");
   assert(longer.bonus > 0, "five letters buys time back");
 
-  // 7) Three in a row lifts the multiplier.
+  // 7) Three valid words in a row lifts the multiplier. CAT, BOX and STONE
+  //    were all cut at x1, so the fourth word is the first to be doubled.
   let s = await state(page);
-  assert(s.streak === 2 && s.mult === 1, `streak building, got ${JSON.stringify(s)}`);
-  await play(page, "table");
-  s = await state(page);
-  assert(s.mult === 2, `three in a row gives x2, got ${s.mult}`);
+  assert(s.streak === 3 && s.mult === 2,
+    `three in a row gives x2, got streak ${s.streak} mult ${s.mult}`);
+  const doubled = await play(page, "table");
+  assert(doubled.ok, "the fourth word lands");
+  assert((await state(page)).mult === 2, "and the multiplier holds");
 
   // 8) A word that isn't a word costs time and the multiplier.
   const before = (await state(page)).remaining;
@@ -225,6 +233,7 @@ async function run() {
     await page.mouse.up();
   };
   const preBomb = await state(page);
+  const cutSoFar = preBomb.words.length;
   await cutBomb();
   const postBomb = await state(page);
   assert(postBomb.remaining < preBomb.remaining - 9, "a bomb costs ten seconds");
@@ -237,8 +246,11 @@ async function run() {
   assert((await state(page)).phase === "over", "a bomb late in a run ends it");
   await page.waitForSelector("#overBack:not(.hidden)", { timeout: 3000 });
   assert((await page.$eval("#overTitle", (e) => e.textContent)) === "Bomb", "and says so");
-  assert((await page.$eval("#stWords", (e) => e.textContent)) === "3", "three words survived the run");
-  assert((await page.$$eval("#cutList span", (e) => e.length)) === 3, "the words are listed");
+  // However many words this run happened to cut, the results card reports that
+  // number and lists them, rather than a figure hardcoded here.
+  assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
+    `results count the ${cutSoFar} words cut`);
+  assert((await page.$$eval("#cutList span", (e) => e.length)) === cutSoFar, "the words are listed");
 
   // 12) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {

@@ -19,8 +19,11 @@ and lift to submit. No accounts, no network calls, no build step.
 
 Sixty seconds. Everything else follows from that.
 
-- **Longer words pay far more.** A word scores its letter values times its
-  length, so a six-letter cut is worth several three-letter ones.
+- **A word scores the sum of its letter values, times its length.** So length
+  pays twice over, and rare letters pay too: CAT is 18 and BOX is 45, both three
+  letters. Each tile carries its value in the corner. Values run from 1 for
+  `a e i r s` up to 10 for `j q x z`, derived from how often each letter appears
+  in this dictionary rather than copied from Scrabble.
 - **Long words buy time.** Five letters adds two seconds, seven adds four. A
   good run sustains itself, up to a ceiling of ninety seconds on the clock.
 - **Three valid words in a row doubles your score**, and a longer streak pushes
@@ -33,7 +36,7 @@ Sixty seconds. Everything else follows from that.
   costs opportunity, not points.
 
 **Slow or Fast** sets how long a tile takes to cross the screen, about ten
-seconds against seven. Same letters, same scoring, more or less time to think. The first build
+seconds against seven. Slow is the default, chosen by play testing. Same letters, same scoring, more or less time to think. The first build
 ran at two seconds and the first person to play it called it unplayable; both
 settings have come down twice since on play-test feedback, and what is called
 Fast here is still very floaty by arcade standards. Deliberately so: reading a

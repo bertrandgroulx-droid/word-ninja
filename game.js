@@ -493,10 +493,12 @@ window.createWordNinja = function (ctx) {
         g2d.textAlign = "center";
         g2d.textBaseline = "middle";
         g2d.fillText(t.ch.toUpperCase(), 0, R * 0.06);
-        // Letter value, small, in the corner.
-        g2d.fillStyle = "rgba(20,23,31,0.5)";
-        g2d.font = "700 " + Math.round(R * 0.36) + "px system-ui, sans-serif";
-        g2d.fillText(String(POINTS[t.ch] || 1), R * 0.55, R * 0.6);
+        // Letter value in the corner. This is the whole reason two words of the
+        // same length score differently, so it has to be readable rather than
+        // decorative.
+        g2d.fillStyle = "rgba(20,23,31,0.72)";
+        g2d.font = "800 " + Math.round(R * 0.42) + "px system-ui, sans-serif";
+        g2d.fillText(String(POINTS[t.ch] || 1), R * 0.54, R * 0.58);
       }
       g2d.restore();
     }
@@ -765,7 +767,9 @@ window.createWordNinja = function (ctx) {
   // ---- start -----------------------------------------------------------------
   function start() {
     mode = read("wn-mode", "daily") === "practice" ? "practice" : "daily";
-    speed = read("wn-speed", "fast") === "slow" ? "slow" : "fast";
+    // Slow is the default: play testing picked it, and it is the kinder first
+    // run. A stored choice still wins.
+    speed = read("wn-speed", "slow") === "fast" ? "fast" : "slow";
     bind();
     sizeCanvas();
     showStart();
