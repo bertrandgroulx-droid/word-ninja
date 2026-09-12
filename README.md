@@ -31,9 +31,15 @@ Sixty seconds. Everything else follows from that.
 - **Missing a letter costs nothing.** Tiles you ignore fall away. Hesitation
   costs opportunity, not points.
 
-Two modes. **Daily** deals the same letters to everyone, keyed to your local
-date, one attempt. **Practice** deals fresh letters as often as you like. Best
-scores and the day's result are kept on the device; nothing leaves it.
+**Slow or Fast** sets how long a tile hangs in the air, about seven seconds
+against four and a half. Same letters, same scoring, more or less time to think.
+The first build ran at two seconds and the first person to play it called it
+unplayable, which is the honest origin of this setting.
+
+Two modes. **Daily** deals the same letters to everyone on the same speed, keyed
+to your local date, one attempt. **Practice** deals fresh letters as often as you
+like. Each speed keeps its own daily run and its own best score, on the device;
+nothing leaves it.
 
 ## Run it locally
 
@@ -91,13 +97,30 @@ A fifth of the round with nothing to cut, and almost never anything longer than
 three letters, made the "long words pay" rule decorative. Denser, longer-lived
 waves fixed both.
 
+What the simulation could not tell me was pace. It counts what is *available*,
+not whether a person can read it in time, and the first build was tuned for
+reflex: tiles were airborne about two seconds. That is fine for cutting fruit
+and hopeless for a game where you must read a dozen letters, find a word among
+them, and plan a path through it in order. The fix was gravity, and the two
+speeds are two gravities. Each pairs with its own wave gap, because slower tiles
+linger and a fixed gap would flood the screen:
+
+| Speed | Gravity | Airborne | Wave gap | Tiles on screen |
+|---|---|---|---|---|
+| Slow | 0.12 | ~6.8s | 3.4s → 2.4s | ~12 |
+| Fast | 0.26 | ~4.6s | 2.4s → 1.6s | ~12 |
+
+Only the pace changes; the crowd stays the same size.
+
 ## Testing
 
 An arcade game can't be tested by chasing flying tiles, so `tests/smoke.mjs`
 works at two levels. The round model is driven directly to check scoring,
-penalties, streaks, repeats, bombs, the clock cap and the one-attempt daily. Then
-one real pointer drag across a tile at a known position proves the slice
-geometry actually connects.
+penalties, streaks, repeats, bombs, the clock cap and the one-attempt daily. It
+also holds a floor under hang time and checks the two speeds really differ,
+since that is the tuning most likely to be broken by accident. Then one real
+pointer drag across a tile at a known position proves the slice geometry
+actually connects.
 
 ```sh
 npm install

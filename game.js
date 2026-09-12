@@ -23,19 +23,23 @@ window.createWordNinja = function (ctx) {
     roundSec: 60,
     // Gravity sets how long a tile hangs, and hang time is the whole game.
     // This is a WORD game: you have to read a dozen letters, find a word in
-    // them, and plan a path through it in the right order. At 1.15 a tile was
-    // airborne about two seconds, which is fine for cutting fruit on reflex and
-    // hopeless for thinking. At 0.26 it is four to five, which leaves room to
-    // look before you swipe.
-    gravity: 0.26,          // x arena height, per second squared
+    // them, and plan a path through it in the right order. The first build ran
+    // at 1.15, about two seconds airborne, which is fine for cutting fruit on
+    // reflex and hopeless for thinking.
+    //
+    // Each speed pairs a gravity with a wave gap, because slower tiles linger:
+    // hold the gap steady and the screen floods. These pairings both leave
+    // about a dozen tiles up at once, so only the pace changes.
+    speeds: {
+      slow: { gravity: 0.12, waveGap: [3.4, 2.4] },   // ~6.8s airborne
+      fast: { gravity: 0.26, waveGap: [2.4, 1.6] }    // ~4.6s airborne
+    },
     // Tuned against a simulation of how many words are formable from the tiles
     // on screen: sparser or shorter-lived waves left nothing to cut about a
     // fifth of the time, and rarely anything past three letters.
     rise: [0.52, 0.88],     // apex height as a fraction of the arena
     tileR: [22, 32],        // tile radius clamp, px
     tileRFrac: 0.072,       // ... as a fraction of arena width
-    // Slower tiles linger, so waves have to thin out or the screen floods.
-    waveGap: [2.4, 1.6],    // seconds between waves, start -> end of round
     waveSize: [4, 6],       // tiles per wave, start -> end of round
     // A safety valve, not a limiter: peaks run near 21 tiles, and a cap that
     // actually bites would drop tiles depending on frame timing, which would
@@ -62,11 +66,13 @@ window.createWordNinja = function (ctx) {
     overBack: $("overBack"), overTitle: $("overTitle"), overSub: $("overSub"),
     stScore: $("stScore"), stWords: $("stWords"), stBest: $("stBest"),
     cutList: $("cutList"), againBtn: $("againBtn"), shareBtn: $("shareBtn"),
+    speedSlow: $("speedSlow"), speedFast: $("speedFast"),
     helpBack: $("helpBack"), helpClose: $("helpClose")
   };
 
   // ---- state -----------------------------------------------------------------
   var mode = "daily";        // "daily" | "practice"
+  var speed = "fast";        // "slow" | "fast" — see CONFIG.speeds
   var phase = "ready";       // "ready" | "playing" | "over"
   var W = 0, H = 0, R = 28;  // arena size and tile radius, px
 
@@ -91,6 +97,8 @@ window.createWordNinja = function (ctx) {
   var toastId = null;
 
   // ---- seeded randomness -----------------------------------------------------
+  function tuning() { return CONFIG.speeds[speed]; }
+
   function hash32(s) {
     var h = 2166136261;
     for (var i = 0; i < s.length; i++) {
@@ -149,7 +157,8 @@ window.createWordNinja = function (ctx) {
     var t = 0.6;
     while (t < CONFIG.roundSec) {
       var p = t / CONFIG.roundSec;                          // 0 at the start, 1 at the end
-      var gap = CONFIG.waveGap[0] + (CONFIG.waveGap[1] - CONFIG.waveGap[0]) * p;
+      var waveGap = tuning().waveGap;
+      var gap = waveGap[0] + (waveGap[1] - waveGap[0]) * p;
       var size = Math.round(CONFIG.waveSize[0] + (CONFIG.waveSize[1] - CONFIG.waveSize[0]) * p);
       size = Math.max(1, size + (rand() < 0.3 ? 1 : 0));
 
@@ -188,7 +197,7 @@ window.createWordNinja = function (ctx) {
   function release(wave) {
     wave.tiles.forEach(function (spec) {
       if (tiles.length >= CONFIG.maxLive) return;
-      var grav = CONFIG.gravity * H;
+      var grav = tuning().gravity * H;
       var rise = spec.rise * H;
       var vy = -Math.sqrt(2 * grav * rise);          // exactly enough to reach the apex
       var air = (-2 * vy) / grav;                    // seconds from launch to landing
@@ -209,7 +218,7 @@ window.createWordNinja = function (ctx) {
   }
 
   function stepTiles(dt) {
-    var grav = CONFIG.gravity * H;
+    var grav = tuning().gravity * H;
     for (var i = tiles.length - 1; i >= 0; i--) {
       var t = tiles[i];
       if (t.wait > 0) { t.wait -= dt; continue; }
@@ -342,9 +351,13 @@ window.createWordNinja = function (ctx) {
 
   function seedFor(kind) {
     return kind === "daily"
-      ? hash32("wn:daily:" + todayKey())
+      ? hash32("wn:daily:" + speed + ":" + todayKey())
       : hash32("wn:practice:" + Date.now() + ":" + Math.random());
   }
+  // Keys are per speed, so a slow run and a fast run keep separate bests and
+  // separate daily attempts rather than overwriting each other.
+  function bestKey() { return mode + ":" + speed; }
+  function dailyKey() { return "wn-daily:" + speed + ":" + todayKey(); }
 
   function beginRound() {
     sizeCanvas();
@@ -388,19 +401,19 @@ window.createWordNinja = function (ctx) {
 
   function saveResult() {
     var best = read("wn-best", {});
-    if (!best[mode] || score > best[mode]) {
-      best[mode] = score;
+    if (!best[bestKey()] || score > best[bestKey()]) {
+      best[bestKey()] = score;
       write("wn-best", best);
     }
     if (mode === "daily") {
-      write("wn-daily:" + todayKey(), {
+      write(dailyKey(), {
         score: score, words: cut.length, reason: endReason,
         best: cut.slice().sort(function (a, b) { return b.points - a.points; })[0] || null
       });
     }
   }
 
-  function dailyPlayed() { return read("wn-daily:" + todayKey(), null); }
+  function dailyPlayed() { return read(dailyKey(), null); }
 
   // ---- the loop --------------------------------------------------------------
   function loop(now) {
@@ -600,9 +613,11 @@ window.createWordNinja = function (ctx) {
       els.startSub.textContent = "You've already played today's run.";
       addLine("Today: " + played.score + " points from " + played.words + " words");
       addLine("Come back tomorrow, or switch to Practice.");
-    } else if (best[mode]) {
-      addLine("Best so far: " + best[mode]);
+    } else if (best[bestKey()]) {
+      addLine("Best so far: " + best[bestKey()]);
     }
+    els.speedSlow.classList.toggle("active", speed === "slow");
+    els.speedFast.classList.toggle("active", speed === "fast");
     els.startBtn.textContent = played ? "Play it again for fun" : "Start";
     els.startBack.classList.remove("hidden");
     els.overBack.classList.add("hidden");
@@ -640,7 +655,7 @@ window.createWordNinja = function (ctx) {
 
   function shareText() {
     var ranked = cut.slice().sort(function (a, b) { return b.points - a.points; });
-    var head = "Word Ninja · " + (mode === "daily" ? todayKey() : "practice");
+    var head = "Word Ninja · " + (mode === "daily" ? todayKey() : "practice") + " · " + speed;
     var body = score + " points · " + cut.length + " words";
     var top = ranked.length ? "best cut: " + ranked[0].word.toUpperCase() + " (" + ranked[0].points + ")" : "";
     var tail = endReason === "bomb" ? "💣 ended on a bomb" : "⏱ ran out of time";
@@ -696,6 +711,13 @@ window.createWordNinja = function (ctx) {
     if (phase === "playing") submit();
   }
 
+  function setSpeed(s) {
+    if (s === speed) return;
+    speed = s;
+    write("wn-speed", s);
+    showStart();   // the card reports this speed's best and its daily attempt
+  }
+
   function setMode(m) {
     if (m === mode && phase === "ready") return;
     mode = m;
@@ -712,6 +734,8 @@ window.createWordNinja = function (ctx) {
 
     els.modeDaily.addEventListener("click", function () { setMode("daily"); });
     els.modePractice.addEventListener("click", function () { setMode("practice"); });
+    els.speedSlow.addEventListener("click", function () { setSpeed("slow"); });
+    els.speedFast.addEventListener("click", function () { setSpeed("fast"); });
     els.startBtn.addEventListener("click", beginRound);
     els.againBtn.addEventListener("click", function () {
       if (mode === "daily") { setMode("practice"); return; }
@@ -741,6 +765,7 @@ window.createWordNinja = function (ctx) {
   // ---- start -----------------------------------------------------------------
   function start() {
     mode = read("wn-mode", "daily") === "practice" ? "practice" : "daily";
+    speed = read("wn-speed", "fast") === "slow" ? "slow" : "fast";
     bind();
     sizeCanvas();
     showStart();
@@ -754,7 +779,8 @@ window.createWordNinja = function (ctx) {
     _debug: {
       state: function () {
         return {
-          phase: phase, mode: mode, score: score, streak: streak,
+          phase: phase, mode: mode, speed: speed, score: score, streak: streak,
+          gravity: tuning().gravity,
           mult: multiplier(), remaining: remaining(), buffer: buffer.join(""),
           tiles: tiles.length, words: cut.map(function (c) { return c.word; }),
           waves: schedule.length
@@ -780,6 +806,7 @@ window.createWordNinja = function (ctx) {
         return { id: t.id, x: x, y: y, r: R };
       },
       schedule: function (seed) { return buildSchedule(hash32(seed)); },
+      setSpeed: setSpeed,
       dailySeedKey: todayKey
     }
   };

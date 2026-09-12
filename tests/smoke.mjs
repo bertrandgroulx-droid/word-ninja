@@ -131,16 +131,36 @@ async function run() {
 
   // 5) Tiles hang long enough to read and plan around. This is a word game:
   //    at two seconds it was unplayable, whatever the other numbers said.
-  const airtime = await page.evaluate(() => {
+  const hang = async () => page.evaluate(() => {
+    const st = window.game._debug.state();
     const s = window.game._debug.schedule("airtime");
-    const rises = s.flatMap((w) => w.tiles.map((t) => t.rise));
+    const tiles = s.flatMap((w) => w.tiles);
     // Matches the launch maths in release(): a tile is airborne
     // 2 * sqrt(2 * rise / gravity) seconds, both in arena-height units.
-    const secs = rises.map((r) => 2 * Math.sqrt(2 * r / 0.26));
-    return { min: Math.min(...secs), avg: secs.reduce((a, b) => a + b, 0) / secs.length };
+    const secs = tiles.map((t) => 2 * Math.sqrt(2 * t.rise / st.gravity));
+    const gaps = s.slice(1).map((w, i) => w.t - s[i].t);
+    // Roughly how many tiles are up at once: each wave's tiles times how many
+    // wave-gaps they stay airborne.
+    const avgAir = secs.reduce((a, b) => a + b, 0) / secs.length;
+    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    return {
+      speed: st.speed, min: Math.min(...secs), avg: avgAir,
+      onScreen: (tiles.length / s.length) * (avgAir / avgGap)
+    };
   });
-  assert(airtime.min > 3.5, `tiles hang long enough to read, min ${airtime.min.toFixed(1)}s`);
-  assert(airtime.avg > 4 && airtime.avg < 7, `hang time is sane, avg ${airtime.avg.toFixed(1)}s`);
+  const fast = await hang();
+  assert(fast.speed === "fast", "opens on the fast speed");
+  assert(fast.min > 3.5, `tiles hang long enough to read, min ${fast.min.toFixed(1)}s`);
+  assert(fast.avg > 4 && fast.avg < 6, `fast hang time, avg ${fast.avg.toFixed(1)}s`);
+
+  // Slow is a real difference, and thins its waves so the screen doesn't flood.
+  await page.evaluate(() => window.game._debug.setSpeed("slow"));
+  const slow = await hang();
+  assert(slow.avg > fast.avg * 1.3, `slow is markedly slower: ${slow.avg.toFixed(1)}s vs ${fast.avg.toFixed(1)}s`);
+  assert(Math.abs(slow.onScreen - fast.onScreen) < 3,
+    `both speeds hold a similar crowd, ${slow.onScreen.toFixed(1)} vs ${fast.onScreen.toFixed(1)}`);
+  assert(await page.$eval("#speedSlow", (e) => e.classList.contains("active")), "the card shows the choice");
+  await page.evaluate(() => window.game._debug.setSpeed("fast"));
 
   // 6) Scoring: a valid word pays, longer words pay much more.
   await page.click("#startBtn");
@@ -233,6 +253,10 @@ async function run() {
   await page.waitForFunction(() => window.game && document.getElementById("startSub"));
   const sub = await page.$eval("#startSub", (e) => e.textContent);
   assert(/already played/i.test(sub), `daily is spent after a run, got "${sub}"`);
+  await page.evaluate(() => window.game._debug.setSpeed("slow"));
+  const slowSub = await page.$eval("#startSub", (e) => e.textContent);
+  assert(!/already played/i.test(slowSub), "the other speed still has its daily run");
+  await page.evaluate(() => window.game._debug.setSpeed("fast"));
 
   // 14) Practice is always available, and running the clock out ends the round.
   await page.click("#modePractice");
@@ -245,7 +269,7 @@ async function run() {
   assert(errors.length === 0, "page errors: " + errors.join(" | "));
   await browser.close();
   server.close();
-  console.log(`PASS — ${data.count} words, ${sched.waves} waves, ${airtime.avg.toFixed(1)}s hang time, scoring/slice/bomb/daily OK`);
+  console.log(`PASS — ${data.count} words, ${sched.waves} waves, hang ${fast.avg.toFixed(1)}s fast / ${slow.avg.toFixed(1)}s slow, scoring/slice/bomb/daily OK`);
 }
 
 run().catch((err) => { console.error("FAIL —", err.message); process.exit(1); });
