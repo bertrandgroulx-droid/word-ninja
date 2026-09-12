@@ -1,14 +1,18 @@
-// Draw the app icons: a letter tile with a blade through it. No image libraries
-// in the toolchain, so this writes the PNGs and the .ico directly.
+// Draw the app icons: a hooded ninja, with the blade's trail behind.
+// No image libraries in the toolchain, so this writes the PNGs and the .ico
+// directly.
 // Run: npm run icons
 import fs from "node:fs";
 import zlib from "node:zlib";
 
-const OUT = new URL("../", import.meta.url).pathname;
+const OUT = process.env.ICON_OUT || new URL("../", import.meta.url).pathname;
+const SIZES = (process.env.ICON_SIZES || "32,120,152,167,180,192,512").split(",").map(Number);
 
-const BG = [0x14, 0x18, 0x21];
-const TILE = [0xe9, 0xee, 0xf7];
-const GLINT = [0x56, 0xe0, 0xff];
+const BG_TOP = [0xff, 0x5d, 0x6d];   // the game's accent, lifted
+const BG_BOT = [0xc7, 0x1f, 0x33];   // ... deepened toward the bottom
+const HOOD = [0x11, 0x14, 0x1b];     // near-black, the app's own ground
+const CLOTH = [0xf2, 0xf5, 0xfa];    // the eye band, as bright as a letter tile
+const BLADE = [0x56, 0xe0, 0xff];    // the trail the game draws behind a cut
 
 // ---- PNG plumbing ----------------------------------------------------------
 const crcTable = (() => {
@@ -65,6 +69,8 @@ const inRoundRect = (x0, y0, x1, y1, r) => (px, py) => {
   const cy = Math.min(Math.max(py, y0 + r), y1 - r);
   return (px - cx) ** 2 + (py - cy) ** 2 <= r * r;
 };
+const inEllipse = (cx, cy, rx, ry) => (px, py) =>
+  ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2 <= 1;
 // A capsule: everything within half-width of the segment.
 const inSegment = (ax, ay, bx, by, half) => (px, py) => {
   const dx = bx - ax, dy = by - ay;
@@ -74,37 +80,43 @@ const inSegment = (ax, ay, bx, by, half) => (px, py) => {
   const cx = ax + t * dx, cy = ay + t * dy;
   return (px - cx) ** 2 + (py - cy) ** 2 <= half * half;
 };
+const both = (a, b) => (px, py) => a(px, py) && b(px, py);
 
+// ---- the mark ---------------------------------------------------------------
 function render(size) {
   const buf = Buffer.alloc(size * size * 4);
   const u = (f) => f * size;
 
-  // A tile sliced in two: the same rounded square drawn twice, each half
-  // clipped to one side of the cut and nudged away from it. The gap between
-  // them is the cut, which reads better than a stripe laid over the top.
-  const tile = inRoundRect(u(0.20), u(0.20), u(0.80), u(0.80), u(0.115));
-  const cx = u(0.5), cy = u(0.5);
-  const angle = -0.62;                                  // rising to the right
-  const nx = -Math.sin(angle), ny = Math.cos(angle);    // normal to the cut
-  const off = u(0.035);                                 // how far each half slides
-
-  const side = (px, py) => (px - cx) * nx + (py - cy) * ny;
-  const halfAbove = (px, py) => tile(px + nx * off, py + ny * off) && side(px + nx * off, py + ny * off) < 0;
-  const halfBelow = (px, py) => tile(px - nx * off, py - ny * off) && side(px - nx * off, py - ny * off) > 0;
-
-  // A thin glint riding just behind the cut, so it still reads as a blade.
-  const glint = inSegment(u(0.06) + nx * off * 2.2, u(0.79) + ny * off * 2.2,
-                          u(0.94) + nx * off * 2.2, u(0.21) + ny * off * 2.2, u(0.016));
+  // Built big and simple. At 60px on a home screen it is the band and the two
+  // eyes that carry the icon, so nothing else competes with them: no outlines,
+  // no small detail, one diagonal for movement.
+  const head = inEllipse(u(0.5), u(0.555), u(0.305), u(0.34));
+  const band = both(head, inRoundRect(u(0.10), u(0.415), u(0.90), u(0.558), u(0.03)));
+  const eyeL = inRoundRect(u(0.345), u(0.450), u(0.458), u(0.518), u(0.029));
+  const eyeR = inRoundRect(u(0.542), u(0.450), u(0.655), u(0.518), u(0.029));
+  // The band's knotted ends, trailing off to the left.
+  const tail1 = inSegment(u(0.22), u(0.462), u(0.035), u(0.395), u(0.024));
+  const tail2 = inSegment(u(0.22), u(0.512), u(0.055), u(0.572), u(0.020));
+  // The cut runs corner to corner and passes behind the head, so it reads as a
+  // slash across the whole tile rather than a stick floating above one.
+  const blade = inSegment(u(0.04), u(0.86), u(0.96), u(0.14), u(0.024));
 
   const layers = [
-    { hit: halfAbove, color: TILE, alpha: 1 },
-    { hit: halfBelow, color: TILE, alpha: 1 },
-    { hit: glint, color: GLINT, alpha: 0.9 }
+    { hit: blade, color: BLADE, alpha: 0.95 },
+    { hit: tail1, color: CLOTH, alpha: 1 },
+    { hit: tail2, color: CLOTH, alpha: 1 },
+    { hit: head, color: HOOD, alpha: 1 },
+    { hit: band, color: CLOTH, alpha: 1 },
+    { hit: eyeL, color: HOOD, alpha: 1 },
+    { hit: eyeR, color: HOOD, alpha: 1 }
   ];
 
   for (let y = 0; y < size; y++) {
+    // Top-to-bottom gradient on the accent, so the flat red has some depth.
+    const t = y / (size - 1);
+    const bg = [0, 1, 2].map((i) => Math.round(BG_TOP[i] + (BG_BOT[i] - BG_TOP[i]) * t));
     for (let x = 0; x < size; x++) {
-      let [r, g, b] = BG;
+      let [r, g, b] = bg;
       for (const layer of layers) {
         const a = coverage(x, y, layer.hit) * layer.alpha;
         if (a <= 0) continue;
@@ -119,9 +131,9 @@ function render(size) {
   return png(size, size, buf);
 }
 
-// 120/152/167 are the iPad and older-iPhone home-screen sizes. 48 isn't here:
+// 120/152/167 are the iPad and older-iPhone home-screen sizes. 48 isn't listed:
 // it exists only inside favicon.ico, so it needs no file of its own.
-for (const size of [32, 120, 152, 167, 180, 192, 512]) {
+for (const size of SIZES) {
   const file = `${OUT}icon-${size}.png`;
   fs.writeFileSync(file, render(size));
   console.log(`${file} — ${(fs.statSync(file).size / 1024).toFixed(1)} KB`);
@@ -159,15 +171,21 @@ console.log(`${icoFile} — ${(fs.statSync(icoFile).size / 1024).toFixed(1)} KB`
 // The same mark as scalable SVG.
 fs.writeFileSync(OUT + "icon.svg",
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <rect width="100" height="100" rx="18" fill="#141821" />
   <defs>
-    <clipPath id="above"><polygon points="-40,-40 140,-40 140,140" /></clipPath>
-    <clipPath id="below"><polygon points="-40,-40 -40,140 140,140" /></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff5d6d" /><stop offset="1" stop-color="#c71f33" />
+    </linearGradient>
+    <clipPath id="head"><ellipse cx="50" cy="55.5" rx="30.5" ry="34" /></clipPath>
   </defs>
-  <g transform="rotate(-35.5 50 50)">
-    <g clip-path="url(#above)"><rect x="20" y="16.5" width="60" height="60" rx="11.5" fill="#e9eef7" /></g>
-    <g clip-path="url(#below)"><rect x="20" y="23.5" width="60" height="60" rx="11.5" fill="#e9eef7" /></g>
-    <line x1="-6" y1="57" x2="106" y2="57" stroke="#56e0ff" stroke-width="3.2" stroke-linecap="round" opacity="0.9" />
+  <rect width="100" height="100" rx="18" fill="url(#bg)" />
+  <line x1="4" y1="86" x2="96" y2="14" stroke="#56e0ff" stroke-width="4.8" stroke-linecap="round" opacity="0.95" />
+  <line x1="22" y1="46.2" x2="3.5" y2="39.5" stroke="#f2f5fa" stroke-width="4.8" stroke-linecap="round" />
+  <line x1="22" y1="51.2" x2="5.5" y2="57.2" stroke="#f2f5fa" stroke-width="4" stroke-linecap="round" />
+  <ellipse cx="50" cy="55.5" rx="30.5" ry="34" fill="#11141b" />
+  <g clip-path="url(#head)">
+    <rect x="10" y="41.5" width="80" height="14.3" rx="3" fill="#f2f5fa" />
   </g>
+  <rect x="34.5" y="45" width="11.3" height="6.8" rx="2.9" fill="#11141b" />
+  <rect x="54.2" y="45" width="11.3" height="6.8" rx="2.9" fill="#11141b" />
 </svg>\n`);
 console.log(`${OUT}icon.svg`);
