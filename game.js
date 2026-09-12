@@ -658,21 +658,43 @@ window.createWordNinja = function (ctx) {
     els.stWords.textContent = String(cut.length);
     els.stBest.textContent = ranked.length ? ranked[0].word.toUpperCase() : "—";
 
-    // Show the arithmetic, not just the answer: letter values, times the
-    // number of letters, times the streak multiplier where one applied.
+    // Show the tiles, not just a total. "24 x 4 x 2" still hides where the 24
+    // came from; the letters with their values on them do not, and they look
+    // like the tiles you actually cut.
     els.cutList.innerHTML = "";
     ranked.slice(0, 12).forEach(function (c) {
-      var row = document.createElement("tr");
-      var word = document.createElement("th");
-      word.textContent = c.word;
-      var work = document.createElement("td");
-      work.textContent = c.sum + " × " + c.word.length + (c.mult > 1 ? " × " + c.mult : "");
-      var total = document.createElement("td");
-      total.className = "tot";
-      total.textContent = c.points;
-      row.appendChild(word);
-      row.appendChild(work);
-      row.appendChild(total);
+      var row = document.createElement("div");
+      row.className = "cut";
+
+      var head = document.createElement("div");
+      head.className = "cut-head";
+      var w = document.createElement("span");
+      w.className = "w";
+      w.textContent = c.word;
+      var tot = document.createElement("span");
+      tot.className = "tot";
+      tot.textContent = c.points;
+      head.appendChild(w);
+      head.appendChild(tot);
+
+      var body = document.createElement("div");
+      body.className = "cut-tiles";
+      c.word.split("").forEach(function (ch) {
+        var t = document.createElement("span");
+        t.className = "mt";
+        t.appendChild(document.createTextNode(ch));
+        var v = document.createElement("i");
+        v.textContent = POINTS[ch] || 1;
+        t.appendChild(v);
+        body.appendChild(t);
+      });
+      var math = document.createElement("span");
+      math.className = "cut-math";
+      math.textContent = c.sum + " × " + c.word.length + (c.mult > 1 ? " × " + c.mult : "");
+      body.appendChild(math);
+
+      row.appendChild(head);
+      row.appendChild(body);
       els.cutList.appendChild(row);
     });
     els.cutMore.textContent = cut.length > 12 ? "and " + (cut.length - 12) + " more" : "";

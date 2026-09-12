@@ -158,15 +158,25 @@ one dense sentence in a list of ten was not answering it.
 The results card then shows the same arithmetic for every word of the run, so
 the answer is there whether or not anyone opened the rules:
 
+each word shown as the tiles it was cut from, values and all, then the
+arithmetic:
+
 ```
-QUIZ     24 × 4 × 2     192
-STRING   10 × 6 × 2     120
-PUT       8 × 3          24
+JAZZ                                     124
+[J10][A1][Z10][Z10]   31 × 4
+
+STRENGTH                                 120
+[S1][T2][R1][E1][N2][G3][T2][H3]   15 × 8
 ```
 
 Letter values, times the number of letters, times the streak multiplier where
-one applied. The test multiplies each row out and checks it equals that row's
-total, and that the rows sum to the score.
+one applied. A bare `31 × 4` still hides where the 31 came from; the tiles do
+not, and they look like the ones you actually cut.
+
+The test checks each entry shows its own letters, that the values on them are
+the real ones, that the first factor is those values added up, that the second
+is the word's length, and that the whole thing multiplies out to the stated
+total and sums to the score.
 
 ## Testing
 

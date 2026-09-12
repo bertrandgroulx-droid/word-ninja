@@ -299,19 +299,29 @@ async function run() {
   // number and lists them, rather than a figure hardcoded here.
   assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
     `results count the ${cutSoFar} words cut`);
-  assert((await page.$$eval("#cutList tr", (e) => e.length)) === cutSoFar, "the words are listed");
-  // Each row shows its working, and the working has to agree with the total.
-  const rows = await page.$$eval("#cutList tr", (trs) => trs.map((tr) => ({
-    word: tr.querySelector("th").textContent,
-    work: tr.children[1].textContent,
-    total: Number(tr.querySelector(".tot").textContent)
+  assert((await page.$$eval("#cutList .cut", (e) => e.length)) === cutSoFar, "the words are listed");
+  // Every entry shows the tiles it was cut from, and the working has to agree
+  // with both the tiles and the total.
+  const rows = await page.$$eval("#cutList .cut", (els) => els.map((el) => ({
+    word: el.querySelector(".w").textContent,
+    tiles: [...el.querySelectorAll(".mt")].map((t) => ({
+      ch: t.childNodes[0].textContent,
+      val: Number(t.querySelector("i").textContent)
+    })),
+    work: el.querySelector(".cut-math").textContent,
+    total: Number(el.querySelector(".tot").textContent)
   })));
+  const POINTS = await page.evaluate(() => window.WORD_NINJA_DATA.POINTS);
   for (const r of rows) {
+    assert(r.tiles.map((t) => t.ch).join("") === r.word,
+      `${r.word} shows its own letters, got ${r.tiles.map((t) => t.ch).join("")}`);
+    assert(r.tiles.every((t) => t.val === POINTS[t.ch]),
+      `${r.word} shows the real letter values`);
     const parts = r.work.split("×").map((n) => Number(n.trim()));
-    assert(parts.length >= 2 && parts.every((n) => n > 0), `${r.word} shows its working, got "${r.work}"`);
-    assert(parts.reduce((a, b) => a * b, 1) === r.total,
-      `${r.word}: ${r.work} should equal ${r.total}`);
+    assert(parts[0] === r.tiles.reduce((a, t) => a + t.val, 0),
+      `${r.word}: the first factor is the tiles added up, got ${parts[0]}`);
     assert(parts[1] === r.word.length, `${r.word} multiplies by its own length, got ${parts[1]}`);
+    assert(parts.reduce((a, b) => a * b, 1) === r.total, `${r.word}: ${r.work} should equal ${r.total}`);
   }
   assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#stScore", (e) => e.textContent)),
     "and the rows add up to the score");
