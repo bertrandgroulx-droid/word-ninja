@@ -70,7 +70,7 @@ window.createWordNinja = function (ctx) {
     startBest: $("startBest"), startBtn: $("startBtn"), startHelp: $("startHelp"),
     overBack: $("overBack"), overTitle: $("overTitle"), overSub: $("overSub"),
     stScore: $("stScore"), stWords: $("stWords"), stBest: $("stBest"),
-    cutList: $("cutList"), cutMore: $("cutMore"),
+    cutList: $("cutList"), cutMore: $("cutMore"), cutHead: $("cutHead"),
     againBtn: $("againBtn"), shareBtn: $("shareBtn"),
     speedSlow: $("speedSlow"), speedFast: $("speedFast"),
     helpBack: $("helpBack"), helpClose: $("helpClose")
@@ -658,27 +658,25 @@ window.createWordNinja = function (ctx) {
     els.stWords.textContent = String(cut.length);
     els.stBest.textContent = ranked.length ? ranked[0].word.toUpperCase() : "—";
 
-    // Show the tiles, not just a total. "24 x 4 x 2" still hides where the 24
-    // came from; the letters with their values on them do not, and they look
-    // like the tiles you actually cut.
+    // One row per word, one column per factor, headed once at the top. An
+    // earlier version wrote the arithmetic inline after the tiles, so the
+    // numbers landed in a different place on every line and a three-letter
+    // word beating a four-letter one looked like a fault rather than a streak.
     els.cutList.innerHTML = "";
+    els.cutHead.classList.toggle("hidden", ranked.length === 0);
     ranked.slice(0, 12).forEach(function (c) {
       var row = document.createElement("div");
-      row.className = "cut";
+      row.className = c.mult > 1 ? "cut boost" : "cut";
 
-      var head = document.createElement("div");
-      head.className = "cut-head";
+      var wt = document.createElement("div");
+      wt.className = "wt";
       var w = document.createElement("span");
       w.className = "w";
       w.textContent = c.word;
-      var tot = document.createElement("span");
-      tot.className = "tot";
-      tot.textContent = c.points;
-      head.appendChild(w);
-      head.appendChild(tot);
+      wt.appendChild(w);
 
-      var body = document.createElement("div");
-      body.className = "cut-tiles";
+      var tiles = document.createElement("span");
+      tiles.className = "tiles";
       c.word.split("").forEach(function (ch) {
         var t = document.createElement("span");
         t.className = "mt";
@@ -686,18 +684,37 @@ window.createWordNinja = function (ctx) {
         var v = document.createElement("i");
         v.textContent = POINTS[ch] || 1;
         t.appendChild(v);
-        body.appendChild(t);
+        tiles.appendChild(t);
       });
-      var math = document.createElement("span");
-      math.className = "cut-math";
-      math.textContent = c.sum + " × " + c.word.length + (c.mult > 1 ? " × " + c.mult : "");
-      body.appendChild(math);
+      wt.appendChild(tiles);
+      row.appendChild(wt);
 
-      row.appendChild(head);
-      row.appendChild(body);
+      row.appendChild(col("sum", String(c.sum)));
+      row.appendChild(col("len", "\u00d7" + c.word.length));
+      // The streak factor wears the amber pill from the score bar; a word cut
+      // without a streak gets a dash rather than a silent gap, so the column
+      // never looks like missing information.
+      var run = col("run", "");
+      if (c.mult > 1) {
+        var pill = document.createElement("b");
+        pill.textContent = "\u00d7" + c.mult;
+        run.appendChild(pill);
+      } else {
+        run.textContent = "\u2013";
+      }
+      row.appendChild(run);
+      row.appendChild(col("tot", String(c.points)));
+
       els.cutList.appendChild(row);
     });
     els.cutMore.textContent = cut.length > 12 ? "and " + (cut.length - 12) + " more" : "";
+
+    function col(kind, text) {
+      var el = document.createElement("span");
+      el.className = "n " + kind;
+      el.textContent = text;
+      return el;
+    }
 
     els.againBtn.textContent = mode === "daily" ? "Practice run" : "Play again";
     els.overBack.classList.remove("hidden");
