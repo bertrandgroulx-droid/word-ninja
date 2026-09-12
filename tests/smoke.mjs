@@ -94,6 +94,22 @@ async function run() {
 
   // 3) Help opens on a first visit; the start card waits behind it.
   assert(await page.$eval("#helpBack", (e) => !e.classList.contains("hidden")), "help opens first time");
+  // The worked example is the first thing in the rules, and it has to be drawn
+  // rather than merely present: a zero-height SVG is the classic silent failure.
+  const demo = await page.$eval("#helpBack .demo svg", (e) => {
+    const r = e.getBoundingClientRect();
+    return { w: r.width, h: r.height, tiles: e.querySelectorAll("rect[rx='10']").length };
+  });
+  assert(demo.w > 200 && demo.h > 100, `the example renders at a usable size, got ${demo.w}x${demo.h}`);
+  assert(demo.tiles === 3, `three tiles are cut in the example, got ${demo.tiles}`);
+  assert(/CAT/.test(await page.$eval("#helpBack .demo figcaption", (e) => e.textContent)),
+    "and the caption does the arithmetic");
+  // The rules quote specific numbers. Those are easy to leave behind when the
+  // tuning moves, so check the ones this suite also verifies behaviourally.
+  const rules = await page.$eval("#helpBack .card", (e) => e.textContent.replace(/\s+/g, " "));
+  for (const claim of ["60 seconds", "1:30", "×5", "3 seconds", "10 seconds", "Two letters or more"]) {
+    assert(rules.includes(claim), `the rules still state "${claim}"`);
+  }
   await page.click("#helpClose");
   assert(await page.$eval("#startBack", (e) => !e.classList.contains("hidden")), "start card is showing");
   assert((await state(page)).phase === "ready", "waiting to start");
@@ -184,7 +200,11 @@ async function run() {
   assert(longer.ok && longer.scored > cat.scored, "a longer word pays more");
   assert(longer.bonus > 0, "five letters buys time back");
 
-  // 7) Three valid words in a row lifts the multiplier. CAT, BOX and STONE
+  // 7) The running word count sits with the score it explains.
+  assert((await page.$eval("#wordCount", (e) => e.textContent)) === "(3)",
+    `word count tracks the run, got ${await page.$eval("#wordCount", (e) => e.textContent)}`);
+
+  // 8) Three valid words in a row lifts the multiplier. CAT, BOX and STONE
   //    were all cut at x1, so the fourth word is the first to be doubled.
   let s = await state(page);
   assert(s.streak === 3 && s.mult === 2,
@@ -193,7 +213,7 @@ async function run() {
   assert(doubled.ok, "the fourth word lands");
   assert((await state(page)).mult === 2, "and the multiplier holds");
 
-  // 8) A word that isn't a word costs time and the multiplier.
+  // 9) A word that isn't a word costs time and the multiplier.
   const before = (await state(page)).remaining;
   const dud = await play(page, "zzzzq");
   assert(!dud.ok && dud.reason === "unknown", "gibberish is rejected");
@@ -201,7 +221,7 @@ async function run() {
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
   assert(after.mult === 1, "and drops the multiplier");
 
-  // 9) Two letters is the floor: a real two-letter word scores, a single tile
+  // 10) Two letters is the floor: a real two-letter word scores, a single tile
   //    never does, and a wrong two-letter guess costs like any other.
   const pair = await play(page, "ox");
   assert(pair.ok && pair.scored > 0, `"ox" is a word, got ${JSON.stringify(pair)}`);
@@ -223,7 +243,7 @@ async function run() {
   assert((await state(page)).score === beforeSlip.score,
     "and nothing since OX has scored: slips, wrong guesses and repeats all pay nothing");
 
-  // 10) A real drag across a real tile actually cuts it.
+  // 11) A real drag across a real tile actually cuts it.
   const box = await page.$eval("#cv", (e) => {
     const r = e.getBoundingClientRect();
     return { x: r.x, y: r.y, w: r.width, h: r.height };
@@ -240,7 +260,7 @@ async function run() {
   await page.mouse.up();
   assert((await state(page)).buffer === "", "lifting submits and clears");
 
-  // 11) A bomb costs ten seconds and the word in hand, but the run goes on.
+  // 12) A bomb costs ten seconds and the word in hand, but the run goes on.
   const cutBomb = async () => {
     const spot = await page.evaluate(() => {
       const arena = document.getElementById("arena").getBoundingClientRect();
@@ -269,9 +289,24 @@ async function run() {
   // number and lists them, rather than a figure hardcoded here.
   assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
     `results count the ${cutSoFar} words cut`);
-  assert((await page.$$eval("#cutList span", (e) => e.length)) === cutSoFar, "the words are listed");
+  assert((await page.$$eval("#cutList tr", (e) => e.length)) === cutSoFar, "the words are listed");
+  // Each row shows its working, and the working has to agree with the total.
+  const rows = await page.$$eval("#cutList tr", (trs) => trs.map((tr) => ({
+    word: tr.querySelector("th").textContent,
+    work: tr.children[1].textContent,
+    total: Number(tr.querySelector(".tot").textContent)
+  })));
+  for (const r of rows) {
+    const parts = r.work.split("×").map((n) => Number(n.trim()));
+    assert(parts.length >= 2 && parts.every((n) => n > 0), `${r.word} shows its working, got "${r.work}"`);
+    assert(parts.reduce((a, b) => a * b, 1) === r.total,
+      `${r.word}: ${r.work} should equal ${r.total}`);
+    assert(parts[1] === r.word.length, `${r.word} multiplies by its own length, got ${parts[1]}`);
+  }
+  assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#stScore", (e) => e.textContent)),
+    "and the rows add up to the score");
 
-  // 12) Time bonuses can't stretch the clock past the cap.
+  // 13) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {
     const d = window.game._debug;
     d.begin();
@@ -282,7 +317,7 @@ async function run() {
   assert(capped.remaining <= 90.01, `clock capped at 90s, got ${capped.remaining.toFixed(1)}`);
   await page.evaluate(() => window.game._debug.end("time"));
 
-  // 13) The daily run is one attempt, and the result is remembered.
+  // 14) The daily run is one attempt, and the result is remembered.
   await page.reload();
   await page.waitForFunction(() => window.game && document.getElementById("startSub"));
   const sub = await page.$eval("#startSub", (e) => e.textContent);
@@ -292,7 +327,7 @@ async function run() {
   assert(!/already played/i.test(slowSub), "the other speed still has its daily run");
   await page.evaluate(() => window.game._debug.setSpeed("fast"));
 
-  // 14) Practice is always available, and running the clock out ends the round.
+  // 15) Practice is always available, and running the clock out ends the round.
   await page.click("#modePractice");
   assert((await state(page)).mode === "practice", "switched to practice");
   await page.click("#startBtn");

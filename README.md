@@ -20,10 +20,20 @@ and lift to submit. No accounts, no network calls, no build step.
 Sixty seconds. Everything else follows from that.
 
 - **A word scores the sum of its letter values, times its length.** So length
-  pays twice over, and rare letters pay too: CAT is 18 and BOX is 45, both three
-  letters. Each tile carries its value in the corner. Values run from 1 for
-  `a e i r s` up to 10 for `j q x z`, derived from how often each letter appears
-  in this dictionary rather than copied from Scrabble.
+  pays twice over, and rare letters pay too. Each tile carries its value in the
+  corner:
+
+  | Word | Letters | | Score |
+  |---|---|---|---|
+  | PUT | 3 + 3 + 2 = 8 | × 3 | 24 |
+  | PAN | 3 + 1 + 2 = 6 | × 3 | 18 |
+  | SAD | 1 + 1 + 2 = 4 | × 3 | 12 |
+
+  Values run from 1 for `a e i r s` up to 10 for `j q x z`, derived from how
+  often each letter appears in this dictionary rather than copied from Scrabble.
+  The rules card in the game shows this same worked example, since "why did
+  those two both-three-letter words score differently" is the question players
+  actually ask.
 - **Long words buy time.** Five letters adds two seconds, seven adds four. A
   good run sustains itself, up to a ceiling of ninety seconds on the clock.
 - **Three valid words in a row doubles your score**, and a longer streak pushes
@@ -132,6 +142,31 @@ Only the pace changes; the crowd stays the same size. Each wave's tiles enter
 spread across most of the gap to the next wave, rather than together: released
 at once they descend as a horizontal band with dead space between bands, and
 spread out they read as a steady drizzle.
+
+## The rules card
+
+The in-game rules open with a drawn example rather than a wall of bullets: three
+tiles cut in numbered order by a blade path, a bomb it steers around, and a
+high-value Z it ignores because a single letter is not a word. The caption does
+the arithmetic. It is inline SVG, so it scales with the card and stays in the
+palette without shipping an image.
+
+Below the bullets, scoring gets its own section, because "why did those two
+three-letter words score differently" is the question players actually ask, and
+one dense sentence in a list of ten was not answering it.
+
+The results card then shows the same arithmetic for every word of the run, so
+the answer is there whether or not anyone opened the rules:
+
+```
+QUIZ     24 × 4 × 2     192
+STRING   10 × 6 × 2     120
+PUT       8 × 3          24
+```
+
+Letter values, times the number of letters, times the streak multiplier where
+one applied. The test multiplies each row out and checks it equals that row's
+total, and that the rows sum to the score.
 
 ## Testing
 
