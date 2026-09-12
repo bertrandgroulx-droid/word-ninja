@@ -201,10 +201,37 @@
   .stats .st .v { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   .stats .st .l { font-size: 0.64rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
-  /* The run's words, scored the same way the rules explain it. */
-  .cuts { margin-top: 12px; }
-  .cuts th { text-transform: uppercase; letter-spacing: 0.04em; }
-  .cut-note { font-size: 0.7rem; color: var(--muted); margin: 8px 0 0; }
+  /* The run's words, each shown as the tiles you cut and what they came to. */
+  .cuts { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .cut { border-top: 1px solid var(--border); padding-top: 7px; }
+  .cut:first-child { border-top: none; padding-top: 0; }
+  .cut-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .cut-head .w {
+    font-size: 0.92rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .cut-head .tot {
+    font-size: 1rem; font-weight: 800; color: var(--good); font-variant-numeric: tabular-nums;
+  }
+  .cut-tiles { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 4px; }
+  /* A miniature of the real tile, value in the corner and all. */
+  .mt {
+    position: relative; width: 23px; height: 23px; border-radius: 5px;
+    background: #e9eef7; color: #14171f;
+    font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    /* Lift the letter so a two-digit value (J Q X Z are all 10) has its own
+       corner instead of colliding with it. */
+    padding: 0 3px 4px 0;
+  }
+  .mt i {
+    position: absolute; right: 2px; bottom: 1px; line-height: 1;
+    font-size: 0.48rem; font-style: normal; font-weight: 800; color: rgba(20,23,31,0.7);
+  }
+  .cut-math {
+    margin-left: 5px; font-size: 0.76rem; color: var(--muted);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .cut-note { font-size: 0.7rem; color: var(--muted); margin: 10px 0 0; }
   #cutMore:empty { display: none; }
 
   /* Worked scoring examples in the rules. */
@@ -286,11 +313,9 @@
           <div class="st"><div class="v" id="stWords">0</div><div class="l">Words</div></div>
           <div class="st"><div class="v" id="stBest">—</div><div class="l">Best cut</div></div>
         </div>
-        <table class="sums cuts">
-          <tbody id="cutList"></tbody>
-        </table>
+        <div class="cuts" id="cutList"></div>
         <p class="cut-note" id="cutMore"></p>
-        <p class="cut-note">letter values, times the number of letters, times the
+        <p class="cut-note">letter values &middot; number of letters &middot;
           streak multiplier where you had one</p>
         <button type="button" class="primary" id="againBtn">Play again</button>
         <button type="button" id="shareBtn">Share result</button>
