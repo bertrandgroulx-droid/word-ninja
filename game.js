@@ -14,9 +14,25 @@ window.createWordNinja = function (ctx) {
   var cv = ctx.canvas;
   var g2d = cv.getContext("2d");
 
-  var DICT = new Set(DATA.WORDS);
+  // The dictionary arrives front-coded: a digit for how many leading letters
+  // this word shares with the one before it, then the rest of it. Whole, the
+  // Scrabble list is 649 KB of text; this way it is 243 KB and unpacks in about
+  // a tenth of a second on a slow phone, once, before the first round.
+  // The digit is what marks a boundary: it sorts below "a", every letter above.
+  var DICT = (function (packed) {
+    var set = new Set(), prev = "", i = 0, j, word;
+    while (i < packed.length) {
+      var shared = packed.charCodeAt(i) - 48;
+      j = ++i;
+      while (j < packed.length && packed.charCodeAt(j) > 96) j++;
+      word = prev.slice(0, shared) + packed.slice(i, j);
+      set.add(word);
+      prev = word;
+      i = j;
+    }
+    return set;
+  })(DATA.WORDS);
   var POINTS = DATA.POINTS;
-  // Shortest word in the dictionary. It is 1, because "a" and "i" are words.
 
   // ---- tunables --------------------------------------------------------------
   var CONFIG = {

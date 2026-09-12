@@ -2,9 +2,20 @@
 // the letter bag it draws tiles from and the per-letter points it scores.
 // Run: npm run generate            (needs network; caches downloads in .cache/)
 //
-// Unlike a grid puzzle, an arcade round has to accept anything the player can
-// reach, so this keeps every common word from MIN to MAX letters rather than a
-// single length.
+// Two separate word lists come out of this, and keeping them apart is the whole
+// design:
+//
+//   ACCEPTED  every Scrabble word from MIN to MAX letters. If it is good enough
+//             for a Scrabble board it is good enough here, so DEET and QOPH
+//             score rather than costing you three seconds.
+//   COMMON    the frequency-gated subset. It never reaches the player as a
+//             rule; it is what the letter bag and the letter values are
+//             measured from, so the tiles that fall are the ones that finish
+//             words people actually know.
+//
+// Widening what is ACCEPTED is pure upside: more of what you try works. Widening
+// what is DEALT is not — a bag measured over the whole Scrabble dictionary
+// weights letters toward words nobody is going to find mid-drag.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -77,15 +88,35 @@ const fragments = new Set(["aren", "cant", "dont", "isnt", "wont", "weve", "wasn
   "dunno", "cmon", "yall", "didn", "doesn", "wouldn", "couldn", "shouldn", "hadn", "weren",
   "isn", "wasn", "mustn", "needn", "daren", "shan", "ain", "ll", "ve", "re", "nt"]);
 
+const ok = (w) => w.length >= MIN && w.length <= MAX && /^[a-z]+$/.test(w)
+  && !bad.has(w) && !fragments.has(w);
+
+// What the game accepts: the Scrabble dictionary, whole.
+const accepted = [...valid].filter(ok).sort();
+
+// What the bag and the points are measured from: the common subset.
 const words = [];
 for (const [w, r] of rank) {           // Map keeps insertion order: common first
-  if (w.length < MIN || w.length > MAX || r > MAX_RANK) continue;
-  if (!/^[a-z]+$/.test(w)) continue;
-  if (!valid.has(w)) continue;
-  if (bad.has(w) || fragments.has(w)) continue;
+  if (r > MAX_RANK || !ok(w) || !valid.has(w)) continue;
   words.push(w);
 }
 words.sort();
+
+// Front-coded: each word is a digit for how many leading letters it shares with
+// the one before, then the rest of it. Sorted words share a lot of prefix, so
+// this is 243 KB where the plain list is 649 KB, and it costs the game one pass
+// at load. The digit is always below "a" in code order, which is what tells the
+// decoder where a word ends.
+function frontCode(list) {
+  let out = "", prev = "";
+  for (const w of list) {
+    let i = 0;
+    while (i < prev.length && i < w.length && prev[i] === w[i]) i++;
+    out += String.fromCharCode(48 + i) + w.slice(i);
+    prev = w;
+  }
+  return out;
+}
 
 // ---- the letter bag --------------------------------------------------------
 // Weight letters by how often they appear in THESE words rather than in English
@@ -118,16 +149,17 @@ const out = path.join(ROOT, "words.js");
 fs.writeFileSync(out, `// GENERATED FILE — do not edit by hand.
 // Rebuild with: npm run generate   (see tools/generate-words.mjs)
 //
-// WORDS  every accepted word: ${MIN} to ${MAX} letters and common enough to be
-//        fair. Two letters is the floor, so no single letter counts, and the
-//        obscurer two-letter Scrabble words are filtered out by frequency the
-//        same way every other length is.
-// BAG    per-mille weight of each letter, measured across WORDS itself.
+// WORDS  every accepted word: the Scrabble dictionary from ${MIN} to ${MAX}
+//        letters, front-coded (see the decoder in game.js). Two letters is the
+//        floor, so no single letter ever counts.
+// BAG    per-mille weight of each letter, measured over the COMMON subset of
+//        those words rather than all of them, so the tiles that fall are the
+//        ones that finish words people know.
 // POINTS what each letter is worth, running inversely to how common it is.
 window.WORD_NINJA_DATA = {
-  MIN: ${Math.min(...words.map((w) => w.length))},
+  MIN: ${Math.min(...accepted.map((w) => w.length))},
   MAX: ${MAX},
-  WORDS: "${words.join(" ")}".split(" "),
+  WORDS: "${frontCode(accepted)}",
   BAG: ${JSON.stringify(weights)},
   POINTS: ${JSON.stringify(points)}
 };
@@ -135,8 +167,9 @@ window.WORD_NINJA_DATA = {
 
 const kb = (fs.statSync(out).size / 1024).toFixed(0);
 const byLen = {};
-for (const w of words) byLen[w.length] = (byLen[w.length] || 0) + 1;
-console.log(`${words.length} words, ${kb} KB (gzips to roughly a third)`);
+for (const w of accepted) byLen[w.length] = (byLen[w.length] || 0) + 1;
+console.log(`${accepted.length} words accepted, ${kb} KB front-coded (gzips to under half)`);
 console.log("  by length:", JSON.stringify(byLen));
+console.log(`  bag and points measured over the ${words.length} common ones`);
 console.log(`  vowels are ${(vowelShare * 100).toFixed(0)}% of the bag`);
 console.log("  dearest letters:", alphabet.filter((c) => points[c] >= 6).join(" "));

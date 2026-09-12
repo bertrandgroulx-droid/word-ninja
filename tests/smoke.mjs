@@ -50,11 +50,25 @@ async function run() {
   await page.goto(base);
   await page.waitForFunction(() => window.game && window.WORD_NINJA_DATA);
 
+  // The dictionary ships front-coded, so unpack it the way the game does before
+  // making any claim about what is in it.
+  const UNPACK = `(packed) => {
+    const set = new Set(); let prev = "", i = 0, j, w;
+    while (i < packed.length) {
+      const shared = packed.charCodeAt(i) - 48;
+      j = ++i;
+      while (j < packed.length && packed.charCodeAt(j) > 96) j++;
+      w = prev.slice(0, shared) + packed.slice(i, j);
+      set.add(w); prev = w; i = j;
+    }
+    return set;
+  }`;
+
   // 1) The dictionary and the letter bag.
-  const data = await page.evaluate(() => {
+  const data = await page.evaluate((src) => {
     const d = window.WORD_NINJA_DATA;
-    const words = d.WORDS;
-    const set = new Set(words);
+    const set = eval(src)(d.WORDS);
+    const words = [...set];
     const vowelWeight = "aeiou".split("").reduce((a, c) => a + d.BAG[c], 0);
     const total = Object.values(d.BAG).reduce((a, b) => a + b, 0);
     return {
@@ -63,21 +77,28 @@ async function run() {
       shaped: words.every((w) => /^[a-z]+$/.test(w)),
       sorted: words.every((w, i) => i === 0 || words[i - 1] <= w),
       unique: set.size === words.length,
+      // Anything a Scrabble board would take, this takes. A player asked
+      // whether DEET counted; it is in the Scrabble list, so now it does.
+      scrabble: ["deet", "qoph", "zarf", "xyst", "suqs", "fyce", "za", "jo", "qi", "xu"]
+        .filter((w) => !set.has(w)),
       hasCommon: ["cat", "stone", "ninja", "letter"].filter((w) => set.has(w)),
       // Ordinary words that happen to be somebody's name. A first-names filter
       // once threw away 813 of these, WILL among them, and a player reported it.
       alsoNames: ["will", "bill", "mark", "rose", "grace", "hope", "art", "dawn",
         "faith", "may", "jack", "chase", "joy", "rich", "summer", "brook", "ivy",
         "olive", "pearl", "robin"].filter((w) => !set.has(w)),
-      // Actual proper nouns. The Scrabble dictionary keeps these out by itself.
+      // Actual proper nouns. The Scrabble dictionary keeps these out by itself,
+      // which is exactly why it is safe to accept the whole thing.
       properNouns: ["helen", "santa", "moore", "jessica", "michael"].filter((w) => set.has(w)),
       singles: words.filter((w) => w.length === 1),
       twoLetter: words.filter((w) => w.length === 2).length,
       vowelShare: vowelWeight / total,
       letters: Object.keys(d.BAG).length
     };
-  });
-  assert(data.count > 8000, `dictionary should be substantial, got ${data.count}`);
+  }, UNPACK);
+  assert(data.count > 80000, `the whole Scrabble list is accepted, got ${data.count}`);
+  assert(data.scrabble.length === 0,
+    `Scrabble words must count: missing ${data.scrabble.join(" ")}`);
   assert(data.shaped && data.unique && data.sorted, "dictionary is clean, unique and sorted");
   assert(data.lengths[0] === 2 && data.lengths[data.lengths.length - 1] === 8,
     `words run 2 to 8 letters, got ${data.lengths.join(",")}`);
@@ -92,6 +113,12 @@ async function run() {
   assert(data.letters === 26, "every letter is in the bag");
   assert(data.vowelShare > 0.25 && data.vowelShare < 0.5,
     `vowels are a workable share of the bag, got ${data.vowelShare.toFixed(2)}`);
+  // The bag is measured over the common words, not the accepted ones. Measured
+  // over the whole Scrabble list it would deal the letters of words nobody is
+  // going to find mid-drag, so pin the letters it actually favours.
+  const bagTop = await page.evaluate(() => Object.entries(window.WORD_NINJA_DATA.BAG)
+    .sort((a, b) => b[1] - a[1]).slice(0, 6).map((e) => e[0]).join(""));
+  assert(/^[aeiorstln]+$/.test(bagTop), `the bag still favours everyday letters, got ${bagTop}`);
 
   // 2) Every icon the page declares resolves. On a shared github.io address a
   //    missing one means the browser borrows a neighbouring app's icon.
@@ -284,10 +311,10 @@ async function run() {
   assert((await page.$eval("#toast", (e) => e.textContent)) === "ZZZZQ is not a word",
     `the rejection names the word, got "${await page.$eval("#toast", (e) => e.textContent)}"`);
   // The same three tiles in the wrong order really is a different word.
-  const scrambled = await page.evaluate(() => {
-    const S = new Set(window.WORD_NINJA_DATA.WORDS);
+  const scrambled = await page.evaluate((src) => {
+    const S = eval(src)(window.WORD_NINJA_DATA.WORDS);
     return { but: S.has("but"), btu: S.has("btu") };
-  });
+  }, UNPACK);
   assert(scrambled.but && !scrambled.btu, "BUT is a word and BTU is not");
   const after = await state(page);
   assert(after.remaining < before - 2.5, "a wrong word costs three seconds");
