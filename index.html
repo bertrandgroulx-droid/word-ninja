@@ -4,6 +4,21 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
 <title>Word Ninja</title>
+<link rel="canonical" href="https://shozbot.com/word-ninja/">
+<script>
+  /* This app lives at shozbot.com/word-ninja/ now. Anyone still arriving at the old
+     GitHub Pages address is moved across, so that scores, streaks and settings
+     — which a browser files under whichever address they were made on — pile up
+     in one place instead of quietly splitting in two.
+
+     The hostname test is load-bearing, not defensive. shozbot.com serves this
+     very file through a rewrite, so without the test the redirect would fire
+     there too and bounce the browser against the same address for ever. */
+  (function () {
+    if (location.hostname !== "bertrandgroulx-droid.github.io") return;
+    location.replace("https://shozbot.com/word-ninja/" + location.search + location.hash);
+  })();
+</script>
 <meta name="description" content="Word Ninja — a phone-first arcade word game. Letters fall past you, and you slice through them to build words against the clock." />
 <meta name="color-scheme" content="dark" />
 
