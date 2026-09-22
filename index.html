@@ -614,6 +614,10 @@
 
 <!-- The shozbot studio kit: the "back to shozbot" bar at the top, and visitor
      counting. One line, so both are changed in one place rather than seven. -->
-<script src="https://shozbot.com/kit/kit.js" data-app="Word Ninja" defer></script>
+<!-- data-hide-standalone: installed to a home screen there is no browser to go
+     back to, and this game is built to fill exactly one phone screen — so the
+     bar drops out there and the layout is the same as it ever was. -->
+<script src="https://shozbot.com/kit/kit.js" data-app="Word Ninja"
+        data-hide-standalone defer></script>
 </body>
 </html>
