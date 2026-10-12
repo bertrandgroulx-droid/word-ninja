@@ -56,10 +56,14 @@ settings have come down twice since on play-test feedback, and what is called
 Fast here is still very floaty by arcade standards. Deliberately so: reading a
 dozen letters and planning a path through them is not a reflex.
 
-Two modes. **Daily** deals the same letters to everyone on the same speed, keyed
-to your local date, one attempt. **Practice** deals fresh letters as often as you
-like. Each speed keeps its own daily run and its own best score, on the device;
-nothing leaves it.
+The page opens on **today's daily run**: the same letters for everyone, chosen
+from the date and numbered by the day of the year, always at Slow. Your first
+finished score is the one that is kept, so a replay is for fun; play day after
+day and you build a streak, and the previous hundred days are listed under
+**Past puzzles**. **Random puzzles** deal fresh letters as often as you like, at
+either speed, and keep a best per speed. All of it stays on the device; nothing
+leaves it. The daily logic is the shared shozbot kit, `shozbot-daily.js`, a copy
+of `kit/daily.js` in the studio repo — change it there, not here.
 
 ## Run it locally
 
