@@ -1,11 +1,18 @@
 // Word Ninja — game module.
 // A factory: index.html calls createWordNinja(ctx).start().
-// ctx = { data, storage, canvas }, where data is the generated words.js payload.
+// ctx = { data, storage, canvas, daily }, where data is the generated words.js
+// payload and daily is the shozbot daily kit (shozbot-daily.js, window.ShozDaily).
 //
 // The round is driven by a wave SCHEDULE built up front from a seed, not by
 // per-frame randomness. Two things fall out of that: the daily run deals the
 // same letters to everyone regardless of frame rate or screen size, and the
 // scoring can be tested without running the physics at all.
+//
+// The daily run is presented the way every shozbot daily is: the page opens on
+// today's run (or today's results, if played), one card stands before the
+// clock starts, the first finished score is the one kept, and there is a Past
+// puzzles list, a streak, and a share line. The kit decides what those say;
+// this file draws them in the game's own look.
 window.createWordNinja = function (ctx) {
   "use strict";
 
@@ -13,6 +20,9 @@ window.createWordNinja = function (ctx) {
   var store = ctx.storage;
   var cv = ctx.canvas;
   var g2d = cv.getContext("2d");
+  var daily = ctx.daily.create({
+    game: "word-ninja", title: "Word Ninja", storage: store, now: ctx.now
+  });
 
   // The dictionary arrives front-coded: a digit for how many leading letters
   // this word shares with the one before it, then the rest of it. Whole, the
@@ -97,21 +107,30 @@ window.createWordNinja = function (ctx) {
   var els = {
     arena: $("arena"), score: $("score"), mult: $("mult"), clock: $("clock"),
     timeFill: $("timeFill"), word: $("word"), pops: $("pops"), toast: $("toast"),
-    wordCount: $("wordCount"),
-    modeDaily: $("modeDaily"), modePractice: $("modePractice"), helpBtn: $("helpBtn"),
+    wordCount: $("wordCount"), helpBtn: $("helpBtn"),
+    dailyText: $("dailyText"), dailyLinks: $("dailyLinks"),
     startBack: $("startBack"), startTitle: $("startTitle"), startSub: $("startSub"),
     startBest: $("startBest"), startBtn: $("startBtn"), startHelp: $("startHelp"),
-    overBack: $("overBack"), overTitle: $("overTitle"), overSub: $("overSub"),
-    stScore: $("stScore"), stWords: $("stWords"), stBest: $("stBest"),
+    speedRow: $("speedRow"),
+    overBack: $("overBack"), overScore: $("overScore"), overSub: $("overSub"),
+    overStreak: $("overStreak"), overSaved: $("overSaved"),
+    stWords: $("stWords"), stBest: $("stBest"),
     cutList: $("cutList"), cutMore: $("cutMore"), cutHead: $("cutHead"),
-    againBtn: $("againBtn"), shareBtn: $("shareBtn"),
+    randomBtn: $("randomBtn"), shareBtn: $("shareBtn"), pastBtn: $("pastBtn"), againBtn: $("againBtn"),
     speedSlow: $("speedSlow"), speedFast: $("speedFast"),
+    pastBack: $("pastBack"), pastList: $("pastList"), pastRandom: $("pastRandom"),
     helpBack: $("helpBack"), helpClose: $("helpClose")
   };
 
   // ---- state -----------------------------------------------------------------
-  var mode = "daily";        // "daily" | "practice"
-  var speed = "fast";        // "slow" | "fast" — see CONFIG.speeds
+  // The daily run is always Slow: it is the game's default speed, and one
+  // puzzle a day means one speed. Fast is a choice for random runs only.
+  var DAILY_SPEED = "slow";
+  var mode = "daily";        // "daily" | "practice" — what meta.mode says
+  var meta = null;           // the kit's description of the run showing: day, number, seed
+  var speed = DAILY_SPEED;   // the speed of the run showing — see CONFIG.speeds
+  var practiceSpeed = DAILY_SPEED; // the stored choice for random runs
+  var lastResult = null;     // what the results card is showing, for Share
   var phase = "ready";       // "ready" | "playing" | "over"
   var W = 0, H = 0, R = 28;  // arena size and tile radius, px
 
@@ -378,36 +397,81 @@ window.createWordNinja = function (ctx) {
     return { word: word, ok: true, scored: gained, bonus: bonus };
   }
 
-  // ---- round lifecycle -------------------------------------------------------
-  function localDateKey(d) {
-    var p = function (x) { return String(x).padStart(2, "0"); };
-    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
-  }
-  function todayKey() { return localDateKey(new Date()); }
-
-  function read(key, fallback) {
+  // ---- storage ---------------------------------------------------------------
+  // Everything lives under the kit's prefix, "wordninja:", because every
+  // shozbot app shares one origin now. The daily records are the kit's
+  // (wordninja:daily:<iso>); the rest are this game's own settings and the
+  // bests for random runs, one per speed.
+  function read(key, fallback) { return daily.read(key, fallback); }
+  function write(key, val) { daily.write(key, val); }
+  function remove(key) { try { store.removeItem(key); } catch (e) { /* ignore */ } }
+  function readRaw(key, fallback) {
     try {
       var raw = store.getItem(key);
       return raw ? JSON.parse(raw) : fallback;
     } catch (e) { return fallback; }
   }
-  function write(key, val) {
-    try { store.setItem(key, JSON.stringify(val)); } catch (e) { /* private mode */ }
+
+  // What was stored before the shared daily kit, and where it went:
+  //   wn-daily:slow:<date>  one record per day at the default speed. These are
+  //                         the daily runs, so each becomes a kit record for
+  //                         that day, with the first score kept — which keeps
+  //                         a streak and this week's runs. The old record held
+  //                         only the best cut and a word count, so a migrated
+  //                         day's results list one word and say so.
+  //   wn-daily:fast:<date>  a fast daily no longer exists; Fast is a random
+  //                         run now. These are deleted, after folding the best
+  //                         of them into the Fast random best (below).
+  //   wn-best               bests keyed mode:speed. The practice bests stay as
+  //                         the random bests per speed; a daily:fast best counts
+  //                         as a fast run and goes in with them; daily:slow is
+  //                         implied by the migrated records, so is dropped.
+  //   wn-speed, wn-help-seen  renamed under the prefix. wn-mode is gone: the
+  //                         page always opens on today's run now.
+  // Runs once per load, finds nothing the second time, and never touches a
+  // day that already has a kit record.
+  function migrate() {
+    var keys = [];
+    try { for (var i = 0; i < store.length; i++) keys.push(store.key(i)); } catch (e) { return; }
+    if (!keys.some(function (k) { return /^wn-/.test(k); })) return;
+
+    var oldBest = readRaw("wn-best", null);
+    if (oldBest) {
+      var best = read("best", {});
+      var slow = oldBest["practice:slow"] || 0;
+      var fast = Math.max(oldBest["practice:fast"] || 0, oldBest["daily:fast"] || 0);
+      if (slow > (best.slow || 0)) best.slow = slow;
+      if (fast > (best.fast || 0)) best.fast = fast;
+      write("best", best);
+      remove("wn-best");
+    }
+    keys.forEach(function (k) {
+      var m = /^wn-daily:(slow|fast):(\d{4}-\d{2}-\d{2})$/.exec(k);
+      if (!m) return;
+      var old = readRaw(k, null), d = daily.parseIso(m[2]);
+      if (m[1] === DAILY_SPEED && old && d && typeof old.score === "number") {
+        daily.save(daily.metaFor(d), {
+          score: old.score, max: null, results: [],
+          recap: {
+            reason: old.reason || "time", words: old.words || 0, partial: true,
+            cuts: old.best ? [[old.best.word, old.best.sum, old.best.mult, old.best.points]] : []
+          }
+        });
+      }
+      remove(k);
+    });
+    var sp = readRaw("wn-speed", null);
+    if (sp === "slow" || sp === "fast") { write("speed", sp); }
+    if (readRaw("wn-help-seen", 0)) write("help-seen", 1);
+    remove("wn-speed");
+    remove("wn-help-seen");
+    remove("wn-mode");
   }
 
-  function seedFor(kind) {
-    return kind === "daily"
-      ? hash32("wn:daily:" + speed + ":" + todayKey())
-      : hash32("wn:practice:" + Date.now() + ":" + Math.random());
-  }
-  // Keys are per speed, so a slow run and a fast run keep separate bests and
-  // separate daily attempts rather than overwriting each other.
-  function bestKey() { return mode + ":" + speed; }
-  function dailyKey() { return "wn-daily:" + speed + ":" + todayKey(); }
-
+  // ---- round lifecycle -------------------------------------------------------
   function beginRound() {
     sizeCanvas();
-    schedule = buildSchedule(seedFor(mode));
+    schedule = buildSchedule(meta.seed);
     waveAt = 0;
     tiles = [];
     buffer = [];
@@ -422,6 +486,7 @@ window.createWordNinja = function (ctx) {
     phase = "playing";
     els.startBack.classList.add("hidden");
     els.overBack.classList.add("hidden");
+    els.pastBack.classList.add("hidden");
     renderWord();
     renderHud();
     lastFrame = 0;
@@ -441,25 +506,31 @@ window.createWordNinja = function (ctx) {
     cancelAnimationFrame(rafId);
     rafId = null;
     renderWord();
-    saveResult();
-    showResults();
+    showResults(saveResult());
   }
 
+  // The record a run leaves. The kit keeps score/max/results/recap/at; this
+  // game's recap is how the run ended and every word cut, with the factors
+  // the results card lays out in columns.
   function saveResult() {
-    var best = read("wn-best", {});
-    if (!best[bestKey()] || score > best[bestKey()]) {
-      best[bestKey()] = score;
-      write("wn-best", best);
-    }
+    var recap = {
+      reason: endReason, words: cut.length,
+      cuts: cut.map(function (c) { return [c.word, c.sum, c.mult, c.points]; })
+    };
+    var res = { meta: meta, score: score, recap: recap, first: false, newBest: false };
     if (mode === "daily") {
-      write(dailyKey(), {
-        score: score, words: cut.length, reason: endReason,
-        best: cut.slice().sort(function (a, b) { return b.points - a.points; })[0] || null
-      });
+      // First score kept: the kit refuses to overwrite a day already saved.
+      res.first = daily.save(meta, { score: score, max: null, results: [], recap: recap }).first;
+    } else {
+      var best = read("best", {});
+      if (score > (best[speed] || 0)) {
+        best[speed] = score;
+        write("best", best);
+        res.newBest = true;
+      }
     }
+    return res;
   }
-
-  function dailyPlayed() { return read(dailyKey(), null); }
 
   // ---- the loop --------------------------------------------------------------
   function loop(now) {
@@ -587,8 +658,6 @@ window.createWordNinja = function (ctx) {
     var m = multiplier();
     els.mult.textContent = "×" + m;
     els.mult.classList.toggle("hidden-soft", m < 2);
-    els.modeDaily.classList.toggle("active", mode === "daily");
-    els.modePractice.classList.toggle("active", mode === "practice");
   }
 
   function renderWord() {
@@ -639,40 +708,105 @@ window.createWordNinja = function (ctx) {
     toastId = setTimeout(function () { els.toast.classList.remove("show"); }, 1400);
   }
 
+  // ---- the daily line and the places to go -----------------------------------
+  // Under the name: which run is showing, and links to the other two places.
+  // The hrefs are the real URL states, so a link can be opened in a new tab;
+  // a tap stays on the page and routes in place.
+  var PLACES = {
+    today: ["Today’s puzzle", "?daily", function () { openToday(); }],
+    past: ["Past puzzles", "?past", function () { showPast(); }],
+    random: ["Random puzzles", "?practice", function () { showStart(daily.practiceMeta()); }]
+  };
+  function setDailyLine(html, places) {
+    els.dailyText.innerHTML = html;
+    els.dailyLinks.innerHTML = "";
+    places.forEach(function (k) {
+      var a = document.createElement("a");
+      a.href = PLACES[k][1];
+      a.textContent = PLACES[k][0];
+      a.addEventListener("click", function (e) { e.preventDefault(); PLACES[k][2](); });
+      els.dailyLinks.appendChild(a);
+    });
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function lineFor(m) {
+    return m && m.mode === "daily"
+      ? "<b>Daily No. " + m.number + "</b> · " + esc(daily.fmtShort(m.date))
+      : "<b>Random puzzles</b>";
+  }
+  function isToday(m) { return m && m.mode === "daily" && m.iso === daily.iso(daily.today()); }
+  function showingMeta(m) {
+    meta = m;
+    mode = m.mode === "daily" ? "daily" : "practice";
+    speed = mode === "daily" ? DAILY_SPEED : practiceSpeed;
+    setUrl(mode === "daily" ? (isToday(m) ? "" : "?daily=" + m.iso) : "?practice");
+    setDailyLine(lineFor(m), mode === "daily" ? ["past", "random"] : ["today", "past"]);
+  }
+  // The address names the day, so a run can be linked; today's is the bare
+  // page. Replaced rather than pushed, so Back leaves the game rather than
+  // walking through every card shown.
+  function setUrl(query) {
+    try { history.replaceState(null, "", location.pathname + query); } catch (e) { /* file:// */ }
+  }
+
   // ---- cards -----------------------------------------------------------------
-  function showStart() {
-    phase = "ready";
+  // Stop the round: no loop, no tiles, no half-built word. The hud keeps the
+  // score it had, so a finished run still reads under its results card.
+  function stopRound(nextPhase) {
+    phase = nextPhase;
     cancelAnimationFrame(rafId);
     rafId = null;
     tiles = [];
     buffer = [];
+    dragging = false;
+    renderWord();
+    g2d.clearRect(0, 0, W, H);
+  }
+  // ...and clear the hud too, for a card that stands before a run.
+  function resetRound() {
+    stopRound("ready");
     elapsed = 0;
     extra = 0;
     score = 0;
     streak = 0;
     renderHud();
-    renderWord();
-    g2d.clearRect(0, 0, W, H);
+  }
+  function showOnly(back) {
+    [els.startBack, els.overBack, els.pastBack].forEach(function (b) {
+      b.classList.toggle("hidden", b !== back);
+    });
+    back.querySelector(".card").scrollTop = 0;
+  }
 
-    var best = read("wn-best", {});
-    var played = mode === "daily" ? dailyPlayed() : null;
-    els.startTitle.textContent = mode === "daily" ? "Daily run" : "Practice run";
-    els.startSub.textContent = mode === "daily"
-      ? "One attempt. Everyone gets the same letters today."
+  // The one card before the clock starts: the rules in brief and Start. For
+  // today's daily by default; for a past day or a random run when asked.
+  function showStart(m) {
+    resetRound();
+    showingMeta(m);
+    var isDaily = mode === "daily";
+    var today = isToday(m);
+    var played = isDaily ? daily.record(m.iso) : null;
+    var best = read("best", {});
+    els.startTitle.textContent = isDaily ? "Daily No. " + m.number : "Random run";
+    els.startSub.textContent = isDaily
+      ? (today ? "Everyone gets the same letters today." : "The letters everyone got on " + daily.fmtShort(m.date) + ".")
       : "Fresh letters every time. Play as often as you like.";
     els.startBest.innerHTML = "";
     if (played) {
-      els.startSub.textContent = "You've already played today's run.";
-      addLine("Today: " + played.score + " points from " + played.words + " words");
-      addLine("Come back tomorrow, or switch to Practice.");
-    } else if (best[bestKey()]) {
-      addLine("Best so far: " + best[bestKey()]);
+      addLine((today ? "Today: " : "Your score: ") + played.score + " points. " +
+        "Play it again for fun; your first score is the one that is kept.");
+    } else if (!isDaily && best[practiceSpeed]) {
+      addLine("Best " + (practiceSpeed === "fast" ? "Fast" : "Slow") + " run so far: " + best[practiceSpeed]);
     }
-    els.speedSlow.classList.toggle("active", speed === "slow");
-    els.speedFast.classList.toggle("active", speed === "fast");
-    els.startBtn.textContent = played ? "Play it again for fun" : "Start";
-    els.startBack.classList.remove("hidden");
-    els.overBack.classList.add("hidden");
+    els.speedRow.classList.toggle("hidden", isDaily);
+    els.speedSlow.classList.toggle("active", practiceSpeed === "slow");
+    els.speedFast.classList.toggle("active", practiceSpeed === "fast");
+    els.startBtn.textContent = played ? "Play it again" : "Start";
+    showOnly(els.startBack);
 
     function addLine(text) {
       var p = document.createElement("p");
@@ -681,36 +815,62 @@ window.createWordNinja = function (ctx) {
     }
   }
 
-  function showResults() {
-    var ranked = cut.slice().sort(function (a, b) { return b.points - a.points; });
-    els.overTitle.textContent = endReason === "bomb" ? "Bomb" : "Time";
-    els.overSub.textContent = endReason === "bomb"
-      ? "You cut a bomb. The run ends there."
-      : (mode === "daily" ? "Daily run · " + todayKey() : "Practice run");
-    els.stScore.textContent = String(score);
-    els.stWords.textContent = String(cut.length);
-    els.stBest.textContent = ranked.length ? ranked[0].word.toUpperCase() : "—";
+  // res = { meta, score, recap, first, newBest }. The same card shows a run
+  // just finished and a day's kept record opened from Past puzzles.
+  function showResults(res) {
+    stopRound("over");
+    showingMeta(res.meta);
+    lastResult = res;
+    var isDaily = mode === "daily";
+    var recap = res.recap || {};
+    var cuts = (recap.cuts || []).slice().sort(function (a, b) { return b[3] - a[3]; });
+    var words = recap.words || cuts.length;
+
+    // The shared order: score, verdict, streak, saved line, then the game's own.
+    els.overScore.textContent = String(res.score);
+    els.overSub.textContent = recap.reason === "bomb"
+      ? "You cut a bomb. The run ended there."
+      : "The clock ran out.";
+    var run = isToday(res.meta) ? daily.streakLine() : "";
+    els.overStreak.textContent = run;
+    els.overStreak.classList.toggle("hidden", !run);
+    var saved, good = false;
+    if (isDaily) {
+      saved = daily.savedLine(res.meta, res.first);
+      good = !!res.first;
+    } else {
+      var best = read("best", {})[speed] || res.score;
+      var label = speed === "fast" ? "Fast" : "Slow";
+      saved = res.newBest ? "A new best for " + label + " runs." : "Random runs are not kept. Your best " + label + " run is " + best + ".";
+      good = !!res.newBest;
+    }
+    els.overSaved.textContent = saved;
+    els.overSaved.classList.toggle("good", good);
+
+    els.stWords.textContent = String(words);
+    els.stBest.textContent = cuts.length ? cuts[0][0].toUpperCase() : "—";
 
     // One row per word, one column per factor, headed once at the top. An
     // earlier version wrote the arithmetic inline after the tiles, so the
     // numbers landed in a different place on every line and a three-letter
     // word beating a four-letter one looked like a fault rather than a streak.
     els.cutList.innerHTML = "";
-    els.cutHead.classList.toggle("hidden", ranked.length === 0);
-    ranked.slice(0, 12).forEach(function (c) {
+    els.cutHead.classList.toggle("hidden", cuts.length === 0);
+    cuts.slice(0, 12).forEach(function (c) {
+      var word = c[0], sum = c[1], mult = c[2], points = c[3];
       var row = document.createElement("div");
-      row.className = c.mult > 1 ? "cut boost" : "cut";
+      row.className = mult > 1 ? "cut boost" : "cut";
 
       var wt = document.createElement("div");
       wt.className = "wt";
       var w = document.createElement("span");
       w.className = "w";
-      w.textContent = c.word;
+      w.textContent = word;
       wt.appendChild(w);
 
       var tiles = document.createElement("span");
       tiles.className = "tiles";
-      c.word.split("").forEach(function (ch) {
+      word.split("").forEach(function (ch) {
         var t = document.createElement("span");
         t.className = "mt";
         t.appendChild(document.createTextNode(ch));
@@ -722,25 +882,28 @@ window.createWordNinja = function (ctx) {
       wt.appendChild(tiles);
       row.appendChild(wt);
 
-      row.appendChild(col("sum", String(c.sum)));
-      row.appendChild(col("len", "\u00d7" + c.word.length));
+      row.appendChild(col("sum", String(sum)));
+      row.appendChild(col("len", "×" + word.length));
       // The streak factor wears the amber pill from the score bar; a word cut
       // without a streak gets a dash rather than a silent gap, so the column
       // never looks like missing information.
-      var run = col("run", "");
-      if (c.mult > 1) {
+      var runCol = col("run", "");
+      if (mult > 1) {
         var pill = document.createElement("b");
-        pill.textContent = "\u00d7" + c.mult;
-        run.appendChild(pill);
+        pill.textContent = "×" + mult;
+        runCol.appendChild(pill);
       } else {
-        run.textContent = "\u2013";
+        runCol.textContent = "–";
       }
-      row.appendChild(run);
-      row.appendChild(col("tot", String(c.points)));
+      row.appendChild(runCol);
+      row.appendChild(col("tot", String(points)));
 
       els.cutList.appendChild(row);
     });
-    els.cutMore.textContent = cut.length > 12 ? "and " + (cut.length - 12) + " more" : "";
+    // A record migrated from before the kit kept only the best cut.
+    els.cutMore.textContent = recap.partial && words > cuts.length
+      ? "Only the best cut was kept from this run; " + words + " words were cut in all."
+      : (cuts.length > 12 ? "and " + (cuts.length - 12) + " more" : "");
 
     function col(kind, text) {
       var el = document.createElement("span");
@@ -749,32 +912,78 @@ window.createWordNinja = function (ctx) {
       return el;
     }
 
-    els.againBtn.textContent = mode === "daily" ? "Practice run" : "Play again";
-    els.overBack.classList.remove("hidden");
+    els.randomBtn.textContent = isDaily ? "Play random puzzles" : "More random puzzles";
+    els.againBtn.textContent = isDaily ? "Play it again" : "Today’s puzzle";
+    els.shareBtn.textContent = "Share";
+    showOnly(els.overBack);
   }
 
+  // The previous 100 days, newest first, with the kept score beside any played.
+  function showPast() {
+    resetRound();
+    meta = null;
+    setUrl("?past");
+    setDailyLine("<b>Past puzzles</b> · the previous " + daily.PAST_DAYS + " days", ["today", "random"]);
+    var t = daily.today();
+    els.pastList.innerHTML = "";
+    daily.pastDays().forEach(function (m) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "?daily=" + m.iso;
+      if (m.isToday) a.className = "today";
+      var n = document.createElement("span");
+      n.className = "n";
+      n.textContent = "No. " + m.number;
+      var d = document.createElement("span");
+      d.className = "d";
+      d.textContent = (m.isToday ? "Today, " : "") + daily.fmtTiny(m.date) +
+        (m.date.getFullYear() !== t.getFullYear() ? ", " + m.date.getFullYear() : "");
+      var s = document.createElement("span");
+      s.className = m.record ? "s done" : "s";
+      s.textContent = m.record ? String(m.record.score) : "Not played";
+      a.appendChild(n); a.appendChild(d); a.appendChild(s);
+      a.addEventListener("click", function (e) { e.preventDefault(); openDate(m.iso); });
+      li.appendChild(a);
+      els.pastList.appendChild(li);
+    });
+    showOnly(els.pastBack);
+  }
+
+  // A day that has been played opens on its results; Play it again starts it over.
+  function openDate(isoDate) {
+    var d = daily.parseIso(isoDate);
+    if (!d) return openToday();
+    if (d > daily.today()) return showPast();
+    var m = daily.metaFor(d), r = daily.record(m.iso);
+    if (r) return showResults({ meta: m, score: r.score, recap: r.recap, first: false, newBest: false });
+    showStart(m);
+  }
+  function openToday() { openDate(daily.iso(daily.today())); }
+
+  // Where the address says to open: a day, the past list, a random run, or
+  // — with nothing said — today's run.
+  function route() {
+    var q;
+    try { q = new URLSearchParams(location.search); } catch (e) { q = null; }
+    if (q && q.has("past")) return showPast();
+    if (q && q.has("practice")) return showStart(daily.practiceMeta());
+    if (q && q.get("daily")) return openDate(q.get("daily"));
+    openToday();
+  }
+
+  // ---- sharing ---------------------------------------------------------------
+  // The kit's lines: "Word Ninja No. 285 · Oct 12", then "Score 1240" (there is
+  // no maximum, so no squares), then the game's address.
   function shareText() {
-    var ranked = cut.slice().sort(function (a, b) { return b.points - a.points; });
-    var head = "Word Ninja · " + (mode === "daily" ? todayKey() : "practice") + " · " + speed;
-    var body = score + " points · " + cut.length + " words";
-    var top = ranked.length ? "best cut: " + ranked[0].word.toUpperCase() + " (" + ranked[0].points + ")" : "";
-    var tail = endReason === "bomb" ? "💣 ended on a bomb" : "⏱ ran out of time";
-    return [head, body, top, tail].filter(Boolean).join("\n");
+    if (!lastResult) return "";
+    return daily.shareText({ meta: lastResult.meta, score: lastResult.score, max: null, squares: "" });
   }
-
   function share() {
     var text = shareText();
-    var ok = function () { toast("Result copied"); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(ok, function () { toast("Copy failed"); });
-    } else {
-      var ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); ok(); } catch (e) { toast("Copy failed"); }
-      document.body.removeChild(ta);
-    }
+    if (!text) return;
+    daily.share(text, els.shareBtn).then(function (how) {
+      if (how === "failed") toast("Copy failed");
+    });
   }
 
   // ---- input -----------------------------------------------------------------
@@ -811,18 +1020,12 @@ window.createWordNinja = function (ctx) {
     if (phase === "playing") submit();
   }
 
+  // The speed choice belongs to random runs; the daily is always Slow.
   function setSpeed(s) {
-    if (s === speed) return;
-    speed = s;
-    write("wn-speed", s);
-    showStart();   // the card reports this speed's best and its daily attempt
-  }
-
-  function setMode(m) {
-    if (m === mode && phase === "ready") return;
-    mode = m;
-    write("wn-mode", m);
-    showStart();
+    if (s !== "slow" && s !== "fast") return;
+    practiceSpeed = s;
+    write("speed", s);
+    if (mode === "practice" && phase === "ready") showStart(meta);  // the card reports this speed's best
   }
 
   function bind() {
@@ -832,14 +1035,16 @@ window.createWordNinja = function (ctx) {
     cv.addEventListener("pointercancel", onUp);
     cv.addEventListener("pointerleave", onUp);
 
-    els.modeDaily.addEventListener("click", function () { setMode("daily"); });
-    els.modePractice.addEventListener("click", function () { setMode("practice"); });
     els.speedSlow.addEventListener("click", function () { setSpeed("slow"); });
     els.speedFast.addEventListener("click", function () { setSpeed("fast"); });
     els.startBtn.addEventListener("click", beginRound);
+    els.randomBtn.addEventListener("click", function () { showStart(daily.practiceMeta()); });
+    els.pastBtn.addEventListener("click", showPast);
+    els.pastRandom.addEventListener("click", function () { showStart(daily.practiceMeta()); });
     els.againBtn.addEventListener("click", function () {
-      if (mode === "daily") { setMode("practice"); return; }
-      beginRound();
+      // On a daily: the same day's letters again, for fun. On a random run the
+      // slot is the way back to today's puzzle.
+      if (mode === "daily") showStart(meta); else openToday();
     });
     els.shareBtn.addEventListener("click", share);
 
@@ -848,7 +1053,7 @@ window.createWordNinja = function (ctx) {
     els.startHelp.addEventListener("click", openHelp);
     els.helpClose.addEventListener("click", function () {
       els.helpBack.classList.add("hidden");
-      write("wn-help-seen", 1);
+      write("help-seen", 1);
     });
 
     window.addEventListener("resize", function () {
@@ -864,14 +1069,14 @@ window.createWordNinja = function (ctx) {
 
   // ---- start -----------------------------------------------------------------
   function start() {
-    mode = read("wn-mode", "daily") === "practice" ? "practice" : "daily";
-    // Slow is the default: play testing picked it, and it is the kinder first
-    // run. A stored choice still wins.
-    speed = read("wn-speed", "slow") === "fast" ? "fast" : "slow";
+    migrate();
+    // Slow is the default for random runs too: play testing picked it, and it
+    // is the kinder first run. A stored choice still wins.
+    practiceSpeed = read("speed", "slow") === "fast" ? "fast" : "slow";
     bind();
     sizeCanvas();
-    showStart();
-    if (!read("wn-help-seen", 0)) els.helpBack.classList.remove("hidden");
+    route();
+    if (!read("help-seen", 0)) els.helpBack.classList.remove("hidden");
   }
 
   return {
@@ -885,9 +1090,17 @@ window.createWordNinja = function (ctx) {
           fallSec: tuning().fallSec,
           mult: multiplier(), remaining: remaining(), buffer: buffer.join(""),
           tiles: tiles.length, words: cut.map(function (c) { return c.word; }),
-          waves: schedule.length
+          waves: schedule.length,
+          meta: meta ? { mode: meta.mode, iso: meta.iso, number: meta.number, seed: meta.seed } : null
         };
       },
+      daily: daily,
+      open: openDate,
+      today: openToday,
+      past: showPast,
+      practice: function () { showStart(daily.practiceMeta()); },
+      shareText: shareText,
+      migrate: migrate,
       begin: beginRound,
       end: endRound,
       // Type a word straight into the buffer and submit it.
@@ -908,8 +1121,7 @@ window.createWordNinja = function (ctx) {
         return { id: t.id, x: x, y: y, r: R };
       },
       schedule: function (seed) { return buildSchedule(hash32(seed)); },
-      setSpeed: setSpeed,
-      dailySeedKey: todayKey
+      setSpeed: setSpeed
     }
   };
 };

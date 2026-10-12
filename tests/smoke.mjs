@@ -203,6 +203,24 @@ async function run() {
   assert(await page.$eval("#startBack", (e) => !e.classList.contains("hidden")), "start card is showing");
   assert((await state(page)).phase === "ready", "waiting to start");
 
+  // The page opens straight on today's daily: no mode picker first. The one
+  // card before the clock carries the rules and Start, and the daily line
+  // under the name says which day it is and where else to go.
+  const todayMeta = await page.evaluate(() => {
+    const m = window.game._debug.daily.todayMeta();
+    return { iso: m.iso, number: m.number, seed: m.seed, short: window.game._debug.daily.fmtShort(m.date) };
+  });
+  const opened = await state(page);
+  assert(opened.mode === "daily" && opened.meta.iso === todayMeta.iso, `opens on today's daily, got ${JSON.stringify(opened.meta)}`);
+  assert((await page.$eval("#startTitle", (e) => e.textContent)) === `Daily No. ${todayMeta.number}`, "the card names the day");
+  assert(/Drag through them/.test(await page.$eval("#startRules", (e) => e.textContent)), "and carries the rules");
+  assert(await page.$eval("#speedRow", (e) => e.classList.contains("hidden")), "no speed choice on the daily: it is always Slow");
+  const dailyLine = await page.$eval("#dailyText", (e) => e.textContent);
+  assert(dailyLine === `Daily No. ${todayMeta.number} · ${todayMeta.short}`, `the daily line, got "${dailyLine}"`);
+  const links = await page.$$eval("#dailyLinks a", (as) => as.map((a) => a.textContent + "=" + a.getAttribute("href")));
+  assert(links.join("|") === "Past puzzles=?past|Random puzzles=?practice", `the two places to go, got ${links.join("|")}`);
+  assert(new URL(page.url()).search === "", `today's run is the bare address, got ${page.url()}`);
+
   // 4) The daily schedule is deterministic, and shaped like a round.
   const sched = await page.evaluate(() => {
     const a = window.game._debug.schedule("same-seed");
@@ -263,6 +281,16 @@ async function run() {
   const opening = await hang();
   assert(opening.speed === "slow", `opens on slow, got ${opening.speed}`);
   const slow = opening;
+  // Fast is a choice for random runs only, so go there first — by the link
+  // in the daily line, which is how a player does it.
+  await page.click("#dailyLinks a[href='?practice']");
+  assert((await state(page)).mode === "practice", "the Random puzzles link opens a random run");
+  assert((await page.$eval("#startTitle", (e) => e.textContent)) === "Random run", "and the card says so");
+  assert(!(await page.$eval("#speedRow", (e) => e.classList.contains("hidden"))), "with the speed choice showing");
+  assert((await page.$eval("#dailyText", (e) => e.textContent)) === "Random puzzles", "the daily line reads Random puzzles");
+  assert((await page.$$eval("#dailyLinks a", (as) => as.map((a) => a.textContent).join("|"))) === "Today’s puzzle|Past puzzles",
+    "with the way back to today and to the past");
+  assert(new URL(page.url()).search === "?practice", `the address says ?practice, got ${page.url()}`);
   await page.evaluate(() => window.game._debug.setSpeed("fast"));
   const fast = await hang();
   assert(fast.min > 4, `tiles stay on screen long enough to read, min ${fast.min.toFixed(1)}s`);
@@ -383,7 +411,7 @@ async function run() {
   await cutBomb();
   assert((await state(page)).phase === "over", "a bomb late in a run ends it");
   await page.waitForSelector("#overBack:not(.hidden)", { timeout: 3000 });
-  assert((await page.$eval("#overTitle", (e) => e.textContent)) === "Bomb", "and says so");
+  assert((await page.$eval("#overSub", (e) => e.textContent)) === "You cut a bomb. The run ended there.", "and says so");
   // However many words this run happened to cut, the results card reports that
   // number and lists them, rather than a figure hardcoded here.
   assert((await page.$eval("#stWords", (e) => e.textContent)) === String(cutSoFar),
@@ -427,8 +455,13 @@ async function run() {
       `${r.word}: ${r.sum} \u00d7 ${r.word.length} \u00d7 ${mult} should equal ${r.total}`);
   }
   assert(rows.some((r) => r.boosted), "at least one word this run was cut on a streak");
-  assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#stScore", (e) => e.textContent)),
+  assert(rows.reduce((a, r) => a + r.total, 0) === Number(await page.$eval("#overScore", (e) => e.textContent)),
     "and the rows add up to the score");
+  // A random run is not kept, but its best per speed is.
+  const practiceSaved = await page.$eval("#overSaved", (e) => e.textContent);
+  assert(/A new best for Fast runs\./.test(practiceSaved), `the first random run is a best, got "${practiceSaved}"`);
+  assert((await page.$eval("#randomBtn", (e) => e.textContent)) === "More random puzzles" &&
+    (await page.$eval("#againBtn", (e) => e.textContent)) === "Today’s puzzle", "a random result offers more, or today's");
 
   // 13) Time bonuses can't stretch the clock past the cap.
   await page.evaluate(() => {
@@ -441,28 +474,201 @@ async function run() {
   assert(capped.remaining <= 90.01, `clock capped at 90s, got ${capped.remaining.toFixed(1)}`);
   await page.evaluate(() => window.game._debug.end("time"));
 
-  // 14) The daily run is one attempt, and the result is remembered.
-  await page.reload();
-  await page.waitForFunction(() => window.game && document.getElementById("startSub"));
-  const sub = await page.$eval("#startSub", (e) => e.textContent);
-  assert(/already played/i.test(sub), `daily is spent after a run, got "${sub}"`);
-  await page.evaluate(() => window.game._debug.setSpeed("slow"));
-  const slowSub = await page.$eval("#startSub", (e) => e.textContent);
-  assert(!/already played/i.test(slowSub), "the other speed still has its daily run");
-  await page.evaluate(() => window.game._debug.setSpeed("fast"));
-
-  // 15) Practice is always available, and running the clock out ends the round.
-  await page.click("#modePractice");
-  assert((await state(page)).mode === "practice", "switched to practice");
+  // 14) Running the clock out ends a round.
+  await page.click("#randomBtn");
+  assert((await state(page)).mode === "practice", "More random puzzles deals another random run");
   await page.click("#startBtn");
   await page.evaluate(() => window.game._debug.setRemaining(0.2));
   await page.waitForFunction(() => window.game._debug.state().phase === "over", { timeout: 5000 });
-  assert((await page.$eval("#overTitle", (e) => e.textContent)) === "Time", "the clock runs out");
+  assert((await page.$eval("#overSub", (e) => e.textContent)) === "The clock ran out.", "the clock runs out");
+  const noBest = await page.$eval("#overSaved", (e) => e.textContent);
+  assert(/Random runs are not kept\. Your best Fast run is \d+\./.test(noBest), `a lesser random run names the best, got "${noBest}"`);
+
+  // ---- the daily, the way every shozbot daily works ----
+  const record = (iso) => page.evaluate((k) => JSON.parse(localStorage.getItem("wordninja:daily:" + k)), iso);
+  const visible = (id) => page.$eval("#" + id, (e) => !e.classList.contains("hidden"));
+
+  // 15) Today's daily deals the kit's seed for the day, at Slow, and the first
+  //     finished score is saved.
+  await page.click("#againBtn");  // "Today’s puzzle" on a random result
+  const back = await state(page);
+  assert(back.mode === "daily" && back.meta.iso === todayMeta.iso && back.phase === "ready", "Today's puzzle goes back to today's card");
+  await page.click("#startBtn");
+  const dailyRun = await state(page);
+  assert(dailyRun.phase === "playing" && dailyRun.speed === "slow", `the daily plays at Slow, got ${dailyRun.speed}`);
+  assert(dailyRun.meta.seed === todayMeta.seed, "from the kit's seed for the day");
+  assert(dailyRun.meta.seed === (await page.evaluate(() => window.ShozDaily.hash32("word-ninja:" + window.game._debug.daily.todayMeta().iso))),
+    "which is the hash of the game name and the date");
+  await play(page, "cat");
+  await play(page, "stone");
+  const dailyScore = (await state(page)).score;
+  await page.evaluate(() => window.game._debug.end("time"));
+  await page.waitForSelector("#overBack:not(.hidden)", { timeout: 3000 });
+
+  // The results card, in the shared order: score, verdict, streak, saved line,
+  // then this game's own breakdown, then the four buttons.
+  const order = await page.$eval("#overBack .card", (card) => {
+    const ids = ["overScore", "overSub", "overStreak", "overSaved", "stWords", "cutList", "randomBtn", "shareBtn", "pastBtn", "againBtn"];
+    const all = [...card.querySelectorAll("*")];
+    return ids.map((id) => all.indexOf(document.getElementById(id)));
+  });
+  assert(order.every((n, i) => n >= 0 && (i === 0 || n > order[i - 1])), `results are in the shared order, got ${order}`);
+  assert((await page.$eval("#overScore", (e) => e.textContent)) === String(dailyScore), "the score, large");
+  assert((await page.$eval("#overSub", (e) => e.textContent)) === "The clock ran out.", "the verdict is how the run ended");
+  assert(!(await visible("overStreak")), "no streak line for a single day");
+  assert((await page.$eval("#overSaved", (e) => e.textContent)) === "Saved as your score for today.", "the first score is saved");
+  assert(await page.$eval("#overSaved", (e) => e.classList.contains("good")), "and said in green");
+  const buttons = await page.$$eval("#overBack .card > button", (bs) => bs.map((b) => b.textContent));
+  assert(buttons.join("|") === "Play random puzzles|Share|Past puzzles|Play it again", `the buttons, got ${buttons.join("|")}`);
+  const rec = await record(todayMeta.iso);
+  assert(rec && rec.score === dailyScore && rec.max === null, `the kit's record for today, got ${JSON.stringify(rec)}`);
+  assert(rec.recap.reason === "time" && rec.recap.cuts.length === 2 && rec.recap.cuts[1][0] === "stone",
+    "with the words cut in the recap");
+  const shareLine = await page.evaluate(() => window.game._debug.shareText());
+  const tiny = await page.evaluate(() => window.game._debug.daily.fmtTiny(window.game._debug.daily.today()));
+  assert(shareLine === `Word Ninja No. ${todayMeta.number} · ${tiny}\nScore ${dailyScore}\n${base}`,
+    `the share text reads Score N with no squares, got ${JSON.stringify(shareLine)}`);
+
+  // 16) Reloading opens on today's results, not the card. A replay is for fun:
+  //     its score shows, the saved one stays.
+  await page.reload();
+  await page.waitForFunction(() => window.game && document.getElementById("overBack"));
+  assert((await visible("overBack")) && !(await visible("startBack")), "a played day opens on its results");
+  assert((await page.$eval("#overScore", (e) => e.textContent)) === String(dailyScore), "the kept score");
+  assert((await page.$eval("#overSaved", (e) => e.textContent)) === "Your first score for this puzzle is the one that is kept.",
+    "and says the first is kept");
+  await page.click("#againBtn");
+  assert(await visible("startBack"), "Play it again shows the card");
+  assert(/Today: \d+ points\. Play it again for fun/.test(await page.$eval("#startBest", (e) => e.textContent)), "which says the day is played");
+  assert((await page.$eval("#startBtn", (e) => e.textContent)) === "Play it again", "and the button agrees");
+  await page.click("#startBtn");
+  assert((await state(page)).meta.seed === todayMeta.seed, "the replay deals the same letters");
+  await play(page, "box");
+  const replayScore = (await state(page)).score;
+  assert(replayScore !== dailyScore, "a different run");
+  await page.evaluate(() => window.game._debug.end("time"));
+  assert((await page.$eval("#overScore", (e) => e.textContent)) === String(replayScore), "the replay's score shows");
+  assert((await page.$eval("#overSaved", (e) => e.textContent)) === "Your first score for this puzzle is the one that is kept.", "but is not kept");
+  assert((await record(todayMeta.iso)).score === dailyScore, "the saved record is untouched");
+
+  // 17) The streak: days in a row ending today.
+  await page.evaluate(() => {
+    const d = window.game._debug.daily;
+    [1, 2].forEach((n) => d.save(d.metaFor(d.addDays(d.today(), -n)), { score: 10 * n, max: null, results: [], recap: { reason: "time", cuts: [] } }));
+  });
+  assert((await page.evaluate(() => window.game._debug.daily.streak())) === 3, "three days in a row");
+  await page.evaluate(() => window.game._debug.today());
+  assert((await visible("overStreak")) && (await page.$eval("#overStreak", (e) => e.textContent)) === "3 days in a row", "and the results say so");
+
+  // 18) Past puzzles: the previous 100 days, newest first, today marked, the
+  //     kept score beside any played. Tapping an unplayed day plays it, and its
+  //     score is saved for that day.
+  await page.click("#pastBtn");
+  assert(await visible("pastBack"), "Past puzzles opens");
+  assert(new URL(page.url()).search === "?past", "at ?past");
+  assert((await page.$eval("#dailyText", (e) => e.textContent)) === "Past puzzles · the previous 100 days", "with its own daily line");
+  const days = await page.$$eval("#pastList a", (as) => as.map((a) => ({
+    cls: a.className, href: a.getAttribute("href"), n: a.querySelector(".n").textContent,
+    d: a.querySelector(".d").textContent, s: a.querySelector(".s").textContent, done: a.querySelector(".s").classList.contains("done")
+  })));
+  assert(days.length === 101, `today and the previous 100 days, got ${days.length}`);
+  assert(days[0].cls === "today" && days[0].n === `No. ${todayMeta.number}` && /^Today, /.test(days[0].d) && days[0].s === String(dailyScore) && days[0].done,
+    `today leads the list with its score, got ${JSON.stringify(days[0])}`);
+  assert(days[1].s === "10" && days[2].s === "20" && days[3].s === "Not played" && !days[3].done, "then yesterday, the day before, and an unplayed day");
+  assert(days[0].href === `?daily=${todayMeta.iso}`, "each day is linkable");
+  await page.click("#pastList li:nth-child(4) a");
+  const pastDay = await state(page);
+  assert(pastDay.mode === "daily" && pastDay.phase === "ready" && pastDay.meta.iso === days[3].href.slice(7), "an unplayed day opens on its card");
+  assert(new URL(page.url()).search === days[3].href, `at its own address, got ${page.url()}`);
+  assert(/The letters everyone got on /.test(await page.$eval("#startSub", (e) => e.textContent)), "which says it is a past day");
+  await page.click("#startBtn");
+  await play(page, "cat");
+  await page.evaluate(() => window.game._debug.end("time"));
+  assert((await page.$eval("#overSaved", (e) => e.textContent)) === "Saved as your score for this day.", "a past day's first score is saved for that day");
+  assert(!(await visible("overStreak")), "a past day shows no streak");
+  assert((await page.evaluate(() => window.game._debug.daily.streak())) === 4, "but it counts towards one");
+
+  // 19) The address opens the right place.
+  await page.goto(base + "?practice");
+  await page.waitForFunction(() => window.game);
+  assert((await state(page)).mode === "practice" && (await visible("startBack")), "?practice is a random run");
+  const yesterday = days[1].href.slice(7);
+  await page.goto(base + "?daily=" + yesterday);
+  await page.waitForFunction(() => window.game);
+  assert((await visible("overBack")) && (await page.$eval("#overScore", (e) => e.textContent)) === "10", "?daily=<a played day> is its results");
+  await page.goto(base + "?daily=2099-01-01");
+  await page.waitForFunction(() => window.game);
+  assert(await visible("pastBack"), "a day that has not happened yet goes to the list");
+  await page.goto(base + "?daily=nonsense");
+  await page.waitForFunction(() => window.game);
+  assert((await state(page)).meta.iso === todayMeta.iso, "and nonsense is today");
+
+  // 20) What was stored before the kit is carried across: the slow dailies
+  //     become the kit's records (first score kept, today's untouched), the
+  //     fast dailies fold into the Fast random best, the settings move under
+  //     the prefix, and every old key goes.
+  const old = await page.evaluate(() => {
+    const d = window.game._debug.daily, five = d.iso(d.addDays(d.today(), -5)), today = d.iso(d.today());
+    localStorage.setItem("wn-daily:slow:" + five, JSON.stringify({ score: 777, words: 9, reason: "bomb", best: { word: "stone", sum: 7, mult: 1, points: 35 } }));
+    localStorage.setItem("wn-daily:fast:" + five, JSON.stringify({ score: 999, words: 9, reason: "time", best: null }));
+    localStorage.setItem("wn-daily:slow:" + today, JSON.stringify({ score: 1, words: 1, reason: "time", best: null }));
+    localStorage.setItem("wn-best", JSON.stringify({ "daily:slow": 777, "daily:fast": 999, "practice:slow": 300, "practice:fast": 400 }));
+    localStorage.setItem("wn-speed", JSON.stringify("slow"));
+    localStorage.setItem("wn-mode", JSON.stringify("practice"));
+    localStorage.setItem("wn-help-seen", "1");
+    localStorage.removeItem("wordninja:help-seen");
+    return { five, today };
+  });
+  await page.goto(base);
+  await page.waitForFunction(() => window.game);
+  const migrated = await page.evaluate((old) => ({
+    five: JSON.parse(localStorage.getItem("wordninja:daily:" + old.five)),
+    today: JSON.parse(localStorage.getItem("wordninja:daily:" + old.today)).score,
+    best: JSON.parse(localStorage.getItem("wordninja:best")),
+    speed: JSON.parse(localStorage.getItem("wordninja:speed")),
+    helpSeen: localStorage.getItem("wordninja:help-seen"),
+    oldKeys: Object.keys(localStorage).filter((k) => /^wn-/.test(k))
+  }), old);
+  assert(migrated.five && migrated.five.score === 777 && migrated.five.max === null, `the slow daily became a record, got ${JSON.stringify(migrated.five)}`);
+  assert(migrated.five.recap.reason === "bomb" && migrated.five.recap.words === 9 && migrated.five.recap.cuts[0][0] === "stone", "with what the old record knew");
+  assert(migrated.today === dailyScore, "today's kit record is not overwritten by an old one");
+  assert(migrated.best.slow === 300 && migrated.best.fast === 999, `random bests per speed, the fast daily folded in, got ${JSON.stringify(migrated.best)}`);
+  assert(migrated.speed === "slow" && migrated.helpSeen === "1", "the settings moved under the prefix");
+  assert(migrated.oldKeys.length === 0, `no old keys remain, got ${migrated.oldKeys}`);
+  assert(await page.$eval("#helpBack", (e) => e.classList.contains("hidden")), "help stays closed for someone who has seen it");
+  assert(await visible("overBack"), "and the page still opens on today's results, whatever the old mode was");
+  await page.evaluate((iso) => window.game._debug.open(iso), old.five);
+  assert((await page.$eval("#overScore", (e) => e.textContent)) === "777" && (await page.$eval("#stWords", (e) => e.textContent)) === "9", "a migrated day shows its score and word count");
+  assert(/Only the best cut was kept/.test(await page.$eval("#cutMore", (e) => e.textContent)), "and says only the best cut was kept");
+  assert((await page.$eval("#overSub", (e) => e.textContent)) === "You cut a bomb. The run ended there.", "and how it ended");
+
+  // 21) Nothing is pushed off the screen on a small phone. The body cannot
+  //     scroll, so anything outside it would be clipped silently.
+  const small = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true });
+  const sp = await small.newPage();
+  await sp.goto(base);
+  await sp.waitForFunction(() => window.game);
+  await sp.click("#helpClose");
+  const fit = await sp.evaluate(() => {
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const daily = r(".daily"), arena = r("#arena"), card = r("#startBack .card"), links = [...document.querySelectorAll("#dailyLinks a")].map((a) => a.getBoundingClientRect());
+    return {
+      sideways: document.documentElement.scrollWidth > innerWidth,
+      dailyIn: daily.top > 0 && daily.bottom < innerHeight && daily.right <= innerWidth,
+      arenaH: arena.height, arenaIn: arena.bottom <= innerHeight,
+      cardIn: card.top >= arena.top && card.bottom <= arena.bottom,
+      tapHeights: links.map((b) => Math.round(b.height))
+    };
+  });
+  assert(!fit.sideways, "nothing scrolls sideways at 375px");
+  assert(fit.dailyIn && fit.arenaIn && fit.cardIn, `daily line, arena and card all on a 375x667 screen, got ${JSON.stringify(fit)}`);
+  assert(fit.arenaH > 450, `the play area keeps its height, got ${fit.arenaH}px`);
+  await small.close();
 
   assert(errors.length === 0, "page errors: " + errors.join(" | "));
   await browser.close();
   server.close();
-  console.log(`PASS — ${data.count} words, ${sched.waves} waves, hang ${fast.avg.toFixed(1)}s fast / ${slow.avg.toFixed(1)}s slow, scoring/slice/bomb/daily OK`);
+  console.log(`PASS — ${data.count} words, ${sched.waves} waves, hang ${fast.avg.toFixed(1)}s fast / ${slow.avg.toFixed(1)}s slow, scoring/slice/bomb/daily/past/streak/migration OK`);
 }
 
 run().catch((err) => { console.error("FAIL —", err.message); process.exit(1); });
