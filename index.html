@@ -133,6 +133,17 @@
     border: 1px solid var(--border); background: var(--card-2);
     color: var(--text); font-family: inherit; font-size: 0.95rem; cursor: pointer;
   }
+  /* The share icon: a link to the run on screen, immediately left of the help
+     button, the same size and on the same centre line. The glyph is the one
+     every shozbot app uses, 18px inside the 34px hit area. Muted at rest so
+     the ? stays the louder of the two; full text colour under a hover or
+     focus. */
+  .share-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0; color: var(--muted);
+  }
+  .share-btn svg { width: 18px; height: 18px; display: block; }
+  .share-btn:hover, .share-btn:focus-visible { color: var(--text); }
 
   /* ---------------- hud ---------------- */
   .hud {
@@ -427,19 +438,38 @@
   .vals b { display: inline-block; width: 1.8rem; color: var(--text);
     letter-spacing: 0; text-transform: none; }
 
+  /* Above the cards (z-index 20) as well as the arena: "Link copied" has to
+     show over the start card and the results, where the share icon is most
+     often pressed. The word rejections it was drawn for happen with no card
+     up, so they are unaffected. */
   .toast {
-    position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); z-index: 15;
+    position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); z-index: 25;
     background: rgba(5, 6, 10, 0.92); border: 1px solid var(--border);
     border-radius: 999px; padding: 6px 13px; font-size: 0.8rem; white-space: nowrap;
     opacity: 0; transition: opacity 0.2s; pointer-events: none;
   }
   .toast.show { opacity: 1; }
+  /* When the toast has to show the link itself (nothing to copy with, no
+     share sheet) it may wrap: an address is longer than a word. */
+  .toast.link {
+    white-space: normal; word-break: break-all; text-align: center;
+    max-width: calc(100% - 20px); border-radius: 12px;
+    font-variant-numeric: tabular-nums;
+  }
 </style>
 </head>
 <body>
   <div class="topbar">
     <div class="brand"><span class="logo" aria-hidden="true">🥷</span><span class="name">Word Ninja</span></div>
     <div class="spacer"></div>
+    <!-- A link to what is on screen: the day's run when one is showing, the
+         game itself otherwise. Share sheet on a phone, copied on a laptop. -->
+    <button class="icon-btn share-btn" id="shareLink" type="button" aria-label="Share a link to this">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5v9h14v-9h-1"/>
+      </svg>
+    </button>
     <button class="icon-btn" id="helpBtn" type="button" aria-label="How to play">?</button>
   </div>
 

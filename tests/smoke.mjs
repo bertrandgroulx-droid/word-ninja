@@ -487,15 +487,21 @@ async function run() {
   // ---- the daily, the way every shozbot daily works ----
   const record = (iso) => page.evaluate((k) => JSON.parse(localStorage.getItem("wordninja:daily:" + k)), iso);
   const visible = (id) => page.$eval("#" + id, (e) => !e.classList.contains("hidden"));
+  const shareLink = () => page.evaluate(() => window.game._debug.shareLink());
+  const SITE = "https://shozbot.com/word-ninja/";  // the canonical address, never the test server's
 
   // 15) Today's daily deals the kit's seed for the day, at Slow, and the first
   //     finished score is saved.
   await page.click("#againBtn");  // "Today’s puzzle" on a random result
   const back = await state(page);
   assert(back.mode === "daily" && back.meta.iso === todayMeta.iso && back.phase === "ready", "Today's puzzle goes back to today's card");
+  // The share icon links to the day showing, dated, from the card onwards.
+  const dated = { url: `${SITE}?daily=${todayMeta.iso}`, title: `Word Ninja · Daily No. ${todayMeta.number}` };
+  assert.deepStrictEqual(await shareLink(), dated, "the share icon links to today's run from its card");
   await page.click("#startBtn");
   const dailyRun = await state(page);
   assert(dailyRun.phase === "playing" && dailyRun.speed === "slow", `the daily plays at Slow, got ${dailyRun.speed}`);
+  assert.deepStrictEqual(await shareLink(), dated, "and while it is being played");
   assert(dailyRun.meta.seed === todayMeta.seed, "from the kit's seed for the day");
   assert(dailyRun.meta.seed === (await page.evaluate(() => window.ShozDaily.hash32("word-ninja:" + window.game._debug.daily.todayMeta().iso))),
     "which is the hash of the game name and the date");
@@ -528,6 +534,37 @@ async function run() {
   const tiny = await page.evaluate(() => window.game._debug.daily.fmtTiny(window.game._debug.daily.today()));
   assert(shareLine === `Word Ninja No. ${todayMeta.number} · ${tiny}\nScore ${dailyScore}\n${base}`,
     `the share text reads Score N with no squares, got ${JSON.stringify(shareLine)}`);
+  assert.deepStrictEqual(await shareLink(), dated, "the share icon still links to the day on its results");
+
+  // The share icon on a laptop: no share sheet, so the link is copied and a
+  // toast says so, above the results card, for about 1.8 seconds.
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  assert(await page.evaluate(() => !navigator.share && !!navigator.clipboard), "headless Chromium is the laptop case");
+  // A rejection toast from the sections above may still be up (they run
+  // faster than its 1.4s), so wait for this toast's own words, not for .show.
+  const toastSays = (text) => page.waitForFunction((t) => {
+    const e = document.getElementById("toast");
+    return e.classList.contains("show") && e.textContent === t;
+  }, text, { timeout: 2000 }).then(() => true, () => false);
+  await page.click("#shareLink");
+  assert(await toastSays("Link copied"), `the toast says Link copied, got "${await page.$eval("#toast", (e) => e.textContent)}"`);
+  assert((await page.evaluate(() => navigator.clipboard.readText())) === dated.url, "and the dated link is on the clipboard");
+  const toastOver = await page.evaluate(() => {
+    const t = document.getElementById("toast"), back = document.getElementById("overBack");
+    const r = t.getBoundingClientRect();
+    t.style.pointerEvents = "auto";  // it takes no taps, so hit-test it by hand
+    const above = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === t;
+    t.style.pointerEvents = "";
+    return { lit: t.classList.contains("show"), above, cardUp: !back.classList.contains("hidden") };
+  });
+  assert(toastOver.cardUp && toastOver.above, `the toast shows over the results card, got ${JSON.stringify(toastOver)}`);
+  await page.waitForFunction(() => !document.getElementById("toast").classList.contains("show"), null, { timeout: 2600 });
+  // With nothing to copy with either, the toast shows the link itself.
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true }));
+  await page.click("#shareLink");
+  assert((await toastSays(dated.url)) && (await page.$eval("#toast", (e) => e.classList.contains("link"))),
+    `without a clipboard the toast shows the link, got "${await page.$eval("#toast", (e) => e.textContent)}"`);
+  await page.waitForFunction(() => !document.getElementById("toast").classList.contains("show"), null, { timeout: 2600 });
 
   // 16) Reloading opens on today's results, not the card. A replay is for fun:
   //     its score shows, the saved one stays.
@@ -566,6 +603,7 @@ async function run() {
   await page.click("#pastBtn");
   assert(await visible("pastBack"), "Past puzzles opens");
   assert(new URL(page.url()).search === "?past", "at ?past");
+  assert.deepStrictEqual(await shareLink(), { url: SITE, title: "Word Ninja" }, "the share icon links to the game itself from the list");
   assert((await page.$eval("#dailyText", (e) => e.textContent)) === "Past puzzles · the previous 100 days", "with its own daily line");
   const days = await page.$$eval("#pastList a", (as) => as.map((a) => ({
     cls: a.className, href: a.getAttribute("href"), n: a.querySelector(".n").textContent,
@@ -592,10 +630,16 @@ async function run() {
   await page.goto(base + "?practice");
   await page.waitForFunction(() => window.game);
   assert((await state(page)).mode === "practice" && (await visible("startBack")), "?practice is a random run");
+  assert.deepStrictEqual(await shareLink(), { url: SITE, title: "Word Ninja" }, "a random run shares the plain address, no seed");
+  await page.click("#startBtn");
+  assert.deepStrictEqual(await shareLink(), { url: SITE, title: "Word Ninja" }, "in play too");
   const yesterday = days[1].href.slice(7);
   await page.goto(base + "?daily=" + yesterday);
   await page.waitForFunction(() => window.game);
   assert((await visible("overBack")) && (await page.$eval("#overScore", (e) => e.textContent)) === "10", "?daily=<a played day> is its results");
+  assert.deepStrictEqual(await shareLink(),
+    { url: `${SITE}?daily=${yesterday}`, title: `Word Ninja · Daily No. ${days[1].n.slice(4)}` },
+    "a past day's results share that day, dated");
   await page.goto(base + "?daily=2099-01-01");
   await page.waitForFunction(() => window.game);
   assert(await visible("pastBack"), "a day that has not happened yet goes to the list");
@@ -642,28 +686,59 @@ async function run() {
   assert(/Only the best cut was kept/.test(await page.$eval("#cutMore", (e) => e.textContent)), "and says only the best cut was kept");
   assert((await page.$eval("#overSub", (e) => e.textContent)) === "You cut a bomb. The run ended there.", "and how it ended");
 
-  // 21) Nothing is pushed off the screen on a small phone. The body cannot
-  //     scroll, so anything outside it would be clipped silently.
-  const small = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true });
-  const sp = await small.newPage();
-  await sp.goto(base);
-  await sp.waitForFunction(() => window.game);
-  await sp.click("#helpClose");
-  const fit = await sp.evaluate(() => {
+  // 21) Nothing is pushed off the screen on a phone. The body cannot scroll,
+  //     so anything outside it would be clipped silently. Measured at two
+  //     sizes, with every card up in turn, and the share icon checked for its
+  //     place: immediately left of the ? button, the same size, on the same
+  //     centre line.
+  const measure = (p) => p.evaluate(() => {
     const r = (sel) => document.querySelector(sel).getBoundingClientRect();
-    const daily = r(".daily"), arena = r("#arena"), card = r("#startBack .card"), links = [...document.querySelectorAll("#dailyLinks a")].map((a) => a.getBoundingClientRect());
+    const top = r(".topbar"), daily = r(".daily"), arena = r("#arena"), share = r("#shareLink"), help = r("#helpBtn");
+    const up = [...document.querySelectorAll("#arena .backdrop")].find((b) => !b.classList.contains("hidden"));
+    const card = up ? up.querySelector(".card").getBoundingClientRect() : null;
+    const links = [...document.querySelectorAll("#dailyLinks a")].map((a) => a.getBoundingClientRect());
+    const inScreen = (b) => b.top >= 0 && b.left >= 0 && b.bottom <= innerHeight && b.right <= innerWidth;
     return {
       sideways: document.documentElement.scrollWidth > innerWidth,
-      dailyIn: daily.top > 0 && daily.bottom < innerHeight && daily.right <= innerWidth,
+      topIn: inScreen(top), dailyIn: daily.top > 0 && inScreen(daily),
       arenaH: arena.height, arenaIn: arena.bottom <= innerHeight,
-      cardIn: card.top >= arena.top && card.bottom <= arena.bottom,
+      cardIn: !card || (card.top >= arena.top && card.bottom <= arena.bottom),  // no card up in play
+      shareIn: inScreen(share),
+      shareSize: [Math.round(share.width), Math.round(share.height)],
+      helpSize: [Math.round(help.width), Math.round(help.height)],
+      sameCentre: Math.abs((share.top + share.height / 2) - (help.top + help.height / 2)) < 1,
+      leftOfHelp: share.right < help.left && help.left - share.right <= 10,
       tapHeights: links.map((b) => Math.round(b.height))
     };
   });
-  assert(!fit.sideways, "nothing scrolls sideways at 375px");
-  assert(fit.dailyIn && fit.arenaIn && fit.cardIn, `daily line, arena and card all on a 375x667 screen, got ${JSON.stringify(fit)}`);
-  assert(fit.arenaH > 450, `the play area keeps its height, got ${fit.arenaH}px`);
-  await small.close();
+  const checkFit = (fit, where) => {
+    assert(!fit.sideways, `nothing scrolls sideways ${where}`);
+    assert(fit.topIn && fit.dailyIn && fit.arenaIn && fit.cardIn && fit.shareIn,
+      `top bar, daily line, arena, card and share icon all on screen ${where}, got ${JSON.stringify(fit)}`);
+    assert(fit.shareSize.join("x") === "34x34" && fit.helpSize.join("x") === "34x34",
+      `the share icon is the ? button's size ${where}, got ${fit.shareSize} vs ${fit.helpSize}`);
+    assert(fit.sameCentre && fit.leftOfHelp, `and sits immediately left of it on the same centre ${where}, got ${JSON.stringify(fit)}`);
+  };
+  for (const [w, h] of [[375, 667], [390, 844]]) {
+    const small = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+    const sp = await small.newPage();
+    await sp.goto(base);
+    await sp.waitForFunction(() => window.game);
+    await sp.click("#helpClose");
+    const where = `at ${w}x${h}`;
+    const fit = await measure(sp);
+    checkFit(fit, where + " (start card)");
+    assert(fit.arenaH > 450, `the play area keeps its height ${where}, got ${fit.arenaH}px`);
+    await sp.click("#startBtn");
+    checkFit(await measure(sp), where + " (in play)");
+    await sp.evaluate(() => window.game._debug.play("cat"));
+    await sp.evaluate(() => window.game._debug.end("time"));
+    await sp.waitForSelector("#overBack:not(.hidden)", { timeout: 3000 });
+    checkFit(await measure(sp), where + " (results)");
+    await sp.click("#pastBtn");
+    checkFit(await measure(sp), where + " (past puzzles)");
+    await small.close();
+  }
 
   assert(errors.length === 0, "page errors: " + errors.join(" | "));
   await browser.close();

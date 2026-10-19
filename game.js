@@ -107,7 +107,7 @@ window.createWordNinja = function (ctx) {
   var els = {
     arena: $("arena"), score: $("score"), mult: $("mult"), clock: $("clock"),
     timeFill: $("timeFill"), word: $("word"), pops: $("pops"), toast: $("toast"),
-    wordCount: $("wordCount"), helpBtn: $("helpBtn"),
+    wordCount: $("wordCount"), helpBtn: $("helpBtn"), shareLink: $("shareLink"),
     dailyText: $("dailyText"), dailyLinks: $("dailyLinks"),
     startBack: $("startBack"), startTitle: $("startTitle"), startSub: $("startSub"),
     startBest: $("startBest"), startBtn: $("startBtn"), startHelp: $("startHelp"),
@@ -701,11 +701,13 @@ window.createWordNinja = function (ctx) {
     setTimeout(function () { d.remove(); }, 1000);
   }
 
-  function toast(msg) {
+  // ms is how long it stays; isLink lets it wrap, for an address.
+  function toast(msg, ms, isLink) {
     els.toast.textContent = msg;
+    els.toast.classList.toggle("link", !!isLink);
     els.toast.classList.add("show");
     clearTimeout(toastId);
-    toastId = setTimeout(function () { els.toast.classList.remove("show"); }, 1400);
+    toastId = setTimeout(function () { els.toast.classList.remove("show"); }, ms || 1400);
   }
 
   // ---- the daily line and the places to go -----------------------------------
@@ -986,6 +988,41 @@ window.createWordNinja = function (ctx) {
     });
   }
 
+  // The share icon in the top bar: a link to what is on screen, not a score.
+  // A specific day's run — its card before the clock, in play, or its results
+  // — links to that day, dated, so it opens the same letters tomorrow. A
+  // random run and the Past puzzles list link to the game itself. Always the
+  // shozbot.com address from the page's own canonical link, never
+  // location.href: this file is also served from the old github.io address,
+  // and saved scores live per address.
+  function shareLink() {
+    var canon = document.querySelector('link[rel="canonical"]');
+    var base = canon && canon.href ? canon.href : location.origin + location.pathname;
+    if (meta && meta.mode === "daily") {
+      return { url: base + "?daily=" + meta.iso, title: "Word Ninja · Daily No. " + meta.number };
+    }
+    return { url: base, title: "Word Ninja" };
+  }
+  // Share sheet on a phone; copied with a "Link copied" toast on a laptop;
+  // the link itself in the toast where neither exists.
+  function shareLinkNow() {
+    var link = shareLink();
+    var nav = typeof navigator !== "undefined" ? navigator : null;
+    if (nav && nav.share) {
+      nav.share({ title: link.title, url: link.url }).catch(function () {});
+      return "shared";
+    }
+    if (nav && nav.clipboard && nav.clipboard.writeText) {
+      nav.clipboard.writeText(link.url).then(
+        function () { toast("Link copied", 1800); },
+        function () { toast(link.url, 1800, true); }
+      );
+      return "copied";
+    }
+    toast(link.url, 1800, true);
+    return "shown";
+  }
+
   // ---- input -----------------------------------------------------------------
   function pointAt(e) {
     var rect = cv.getBoundingClientRect();
@@ -1047,6 +1084,7 @@ window.createWordNinja = function (ctx) {
       if (mode === "daily") showStart(meta); else openToday();
     });
     els.shareBtn.addEventListener("click", share);
+    els.shareLink.addEventListener("click", shareLinkNow);
 
     var openHelp = function () { els.helpBack.classList.remove("hidden"); };
     els.helpBtn.addEventListener("click", openHelp);
@@ -1100,6 +1138,7 @@ window.createWordNinja = function (ctx) {
       past: showPast,
       practice: function () { showStart(daily.practiceMeta()); },
       shareText: shareText,
+      shareLink: shareLink,
       migrate: migrate,
       begin: beginRound,
       end: endRound,
